@@ -21,10 +21,10 @@ jobs:
         pip install nuitka
     - name: Build Executable with Nuitka
       run: |
-        call build_scripts\build_nuitka.bat
+        .\build_scripts\build_nuitka.bat
     - name: Compile Inno Setup Installer
       run: |
-        "C:\Program Files (x86)\Inno Setup 6\iscc.exe" build_scripts\setup.iss
+        & "C:\Program Files (x86)\Inno Setup 6\iscc.exe" build_scripts\setup.iss
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
