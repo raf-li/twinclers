@@ -1,0 +1,402 @@
+# Welcome to Twinclers Guard
+WELCOME TO TWINCLERS GUARD!
+===========================
+
+Twinclers Guard is an advanced, native Windows desktop security utility designed to protect your sensitive folders, source code, media, and documents from accidental deletion, unauthorized modification, or unauthorized viewing.
+
+It uniquely combines:
+1. Windows NTFS Kernel-Level Access Control Lists (ACLs) for instantaneous 0.01-second security.
+2. Military-Grade AES-256-GCM Cryptographic Encryption with PBKDF2-HMAC-SHA256 (200,000 iterations) for zero-knowledge privacy.
+
+KEY CAPABILITIES:
+- 8 Comprehensive Protection Modes from lightweight Anti-Accidental Delete to instant media gates and hardcore military encryption vaults.
+- Active Windows Explorer Watcher automatically detects when you navigate to a password-protected folder and brings the Password Prompt to the front.
+- Smart Auto-Relock on Close: When you close File Explorer, Twinclers Guard automatically locks the folder in the background.
+- First-class NVDA Screen Reader support with real-time speech and Braille feedback.
+- System Tray integration: minimize with Ctrl+H or the minimize button.
+
+# Protection Modes
+Twinclers Guard provides 8 distinct security modes tailored for different workflows and performance requirements.
+
+## 1. Anti-Accidental Delete (Recommended for Daily Work)
+MODE: ANTI-ACCIDENTAL DELETE (DEFAULT)
+=======================================
+
+Designed for everyday working workspaces, project repositories, and active document folders.
+
+HOW IT WORKS:
+Twinclers Guard applies a Windows NTFS Kernel Deny rule for DELETE and DELETE_CHILD with Object Inherit (OI) and Container Inherit (CI) inheritance flags targeting the Everyone security identifier.
+
+WHAT YOU CAN DO:
+- Open, read, and browse all files and subdirectories.
+- Edit and save changes to existing files freely.
+- Create new files and subfolders inside.
+
+WHAT WINDOWS STRICTLY BLOCKS:
+- Deleting any file or subfolder inside (Delete / Shift + Delete).
+- Deleting the root folder itself.
+
+PRACTICAL EXAMPLE:
+You are working on a Git project in D:\MyProject. You want full freedom to write code, compile, and add assets, but want absolute immunity against accidental Shift + Delete in File Explorer. Anti-Delete mode gives you 100% normal workflow with zero performance cost and complete delete protection.
+
+## 2. Instant Password Gate (0.01 Second Fast Lock)
+MODE: INSTANT PASSWORD GATE
+============================
+
+Designed for large media libraries, 4K video editing projects, music collections, and large active folders (50 GB to 2 TB and above).
+
+HOW IT WORKS:
+Instead of encrypting gigabytes of data byte-by-byte, Instant Password Gate locks the NTFS Kernel Access Gate in 0.01 seconds. When locked, Windows rejects all read and browse requests. When unlocked with your master password, access is granted immediately.
+
+WINDOWS EXPLORER INTEGRATION:
+- Enter the folder in File Explorer: Password Prompt automatically appears on screen.
+- Type your password: Folder opens in 0.01 seconds.
+- Close File Explorer: Folder automatically relocks in 0.01 seconds.
+
+PRACTICAL EXAMPLE:
+You have 120 GB of personal videos in D:\FamilyMedia. Using Instant Gate, you enter your password and can immediately play 4K videos without waiting for heavy decryption. Once you close the Explorer window, the folder is locked immediately.
+
+## 3. AES-256 Military Vault (Encrypted)
+MODE: AES-256-GCM MILITARY ENCRYPTION VAULT
+============================================
+
+Designed for maximum secrecy: source code, proprietary algorithms, API tokens, cryptocurrency wallets, financial records, and confidential contracts.
+
+HOW IT WORKS:
+Every single file is encrypted byte-by-byte using the AES-256-GCM authenticated cipher. Key derivation uses PBKDF2-HMAC-SHA256 with 200,000 iterations and a unique cryptographically secure random 16-byte salt per file.
+
+WHY IT IS IMPENETRABLE:
+- NTFS permissions can theoretically be reset by an Administrator who takes ownership of a drive.
+- However, AES-256-GCM encrypted data (.twvault) is pure mathematical ciphertext.
+- Even if an Administrator takes ownership, opens CMD, runs PowerShell, or extracts the hard drive and plugs it into another machine, they will see only random undecipherable noise.
+- Without your master password, cracking a 256-bit AES key with PBKDF2 (200,000 iterations) would take billions of years even with modern supercomputers.
+
+PORTABILITY (NO DATABASE REQUIRED):
+- Every encrypted file (.twvault) carries its own self-contained cryptographic header inside it.
+- This means you can copy the encrypted folder to a USB drive, to another PC, or to another drive letter (such as E:\testing instead of D:\testing), and it will still decrypt correctly with your master password alone.
+- No database.json is needed to decrypt on another machine.
+
+PRACTICAL EXAMPLE:
+You have sensitive Python and C++ code, private SSH keys, and client database backups in D:\SecretProjects. With AES-256 Vault, the data is physically encrypted on disk. If your laptop is ever stolen or inspected, your data remains mathematically impossible to read.
+
+## 4. Anti-Rename and Move Mode
+MODE: ANTI-RENAME AND MOVE PLUS ANTI-DELETE
+============================================
+
+Prevents both deletion and accidental renaming, cutting, or moving of folders and files.
+
+HOW IT WORKS:
+Restricts WRITE_ATTRIBUTES and WRITE_EXTENDED_ATTRIBUTES alongside DELETE permissions in the NTFS DACL.
+
+PRACTICAL EXAMPLE:
+Shared server folders or fixed directory paths where automated build scripts or services expect specific folder and file names to always remain unchanged.
+
+## 5. Append-Only Mode (Log Mode)
+MODE: APPEND-ONLY LOG SAFE
+===========================
+
+Ideal for audit logs, recording directories, transaction histories, and surveillance footage.
+
+WHAT YOU CAN DO:
+- Continuously create new files and logs.
+- Read existing files.
+
+WHAT IS BLOCKED:
+- Editing, overwriting, modifying, or deleting existing files.
+
+## 6. Read-Only Mode (Total Freeze)
+MODE: READ-ONLY TOTAL FREEZE
+=============================
+
+Best for completed project archives, published books, master disk images, and final tax records.
+- Full read and browse access.
+- All modifications, additions, and deletions are permanently blocked until unprotected.
+
+## 7. Full Lock Mode
+MODE: FULL ACCESS LOCK
+=======================
+
+Total blackout access barrier. Blocks all read, write, browse, and execute requests for all users until unlocked via Twinclers Guard.
+
+## 8. Custom Granular Rules
+MODE: CUSTOM GRANULAR RULES
+============================
+
+Allows you to individually toggle specific NTFS permissions via a visual checklist:
+- Deny Deletion of Files and Folders
+- Deny Renaming and Moving
+- Deny Modifying Existing Files
+- Deny Creating New Files and Folders
+- Apply Recursively to Subfolders (Inheritance)
+
+# Cryptography and Security Specifications
+UNDER THE HOOD: ARCHITECTURE AND STANDARDS
+===========================================
+
+Twinclers Guard implements the highest industry standards in cybersecurity.
+
+## Symmetric Cipher (AES-256-GCM)
+AES-256-GCM AUTHENTICATED ENCRYPTION:
+======================================
+
+- Algorithm: AES-256-GCM (Advanced Encryption Standard in Galois/Counter Mode)
+- Key Length: 256 bits (32 bytes)
+- Nonce / IV: 96 bits (12 bytes) uniquely generated via secrets.token_bytes() for every encryption operation.
+- Authenticated Encryption: GCM provides built-in integrity verification. Any tampering with ciphertext is detected immediately upon decryption. Even a single flipped bit will cause decryption to fail completely.
+- 100 files with the same password: Each file gets its own random 16-byte salt and 12-byte nonce, resulting in a completely different AES key and completely different ciphertext even if two files have identical content.
+
+## Key Derivation Function (PBKDF2-HMAC-SHA256)
+KEY DERIVATION FUNCTION DETAILS:
+=================================
+
+- Standard: PBKDF2 (Password-Based Key Derivation Function 2)
+- Pseudo-Random Function: HMAC-SHA256
+- Work Factor (Iterations): 200,000 rounds
+- Salt: 128 bits (16 bytes) of cryptographic random salt per file, generated by the OS hardware entropy source (secrets.token_bytes).
+- Resistance: 200,000 iterations intentionally increases computational cost for attackers by a factor of 200,000 compared to a simple SHA-256 hash, providing robust defense against GPU-accelerated dictionary and brute-force attacks.
+
+## Randomized Vault File Header
+VAULT FILE HEADER SECURITY:
+============================
+
+Unlike naive encryption tools that use a fixed magic signature (which lets anyone scan your disk to find encrypted files), Twinclers Guard derives the 3-byte vault header from each file's unique random salt using an XOR operation.
+
+The result: every .twvault file begins with a different byte sequence. There is no fixed byte pattern that forensic tools or disk scanners can search for to identify your encrypted files.
+
+## Kernel-Level NTFS Security
+NTFS KERNEL SECURITY PERSISTENCE:
+==================================
+
+- Built directly into the Windows NT Operating System kernel (NTFS and ReFS).
+- Persistent on disk: Protection rules remain active even if Twinclers Guard is uninstalled, closed, or the PC restarts.
+- Uses language-independent SID (*S-1-1-0 for Everyone) to ensure compatibility across all Windows language versions.
+
+# Security Hardening Features
+BUILT-IN SECURITY DEFENSES:
+============================
+
+Twinclers Guard includes multiple layers of active defenses against both digital and physical attacks.
+
+## Anti-Brute Force Protection
+ANTI-BRUTE FORCE AND RATE LIMITING:
+=====================================
+
+Twinclers Guard automatically blocks automated password guessing attacks through exponential backoff:
+
+- After 3 failed attempts: 1 second lockout
+- After 5 failed attempts: 5 second lockout
+- After 8 failed attempts: 30 second lockout
+- After 12 failed attempts: 120 second lockout
+- After 15 or more failed attempts: 600 second (10 minute) lockout
+
+This makes automated brute force tools completely impractical even against weak passwords.
+
+## Secure File Wipe (DoD 5220.22-M)
+SECURE DELETE BEFORE REMOVAL:
+==============================
+
+When Twinclers Guard encrypts a file, it does NOT simply call os.remove() to delete the original. That would leave the plaintext data physically present on your hard drive sector, recoverable by forensic tools like Recuva or PhotoRec.
+
+Instead, Twinclers Guard applies a 3-pass DoD 5220.22-M secure wipe:
+
+Pass 1: Overwrite entire file content with cryptographically random bytes.
+Pass 2: Overwrite again with a second set of cryptographically random bytes.
+Pass 3: Overwrite a third time and call fsync() to flush to physical storage.
+Final: Only then is the file entry removed from the filesystem table.
+
+This makes data recovery of the original plaintext file practically impossible using standard forensic tools.
+
+## HMAC-Signed Database Integrity
+DATABASE TAMPERING PROTECTION:
+================================
+
+The local configuration database (database.json) is cryptographically signed using HMAC-SHA256. The signing key is derived from your unique Windows Machine GUID stored in the Registry under:
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\MachineGuid
+
+This means:
+- The HMAC signature is unique to your specific computer.
+- If any malware or attacker modifies the database.json file (for example, to replace the password hash with their own), Twinclers Guard detects the tampering on the next startup and warns you immediately.
+- The HMAC also prevents hash substitution attacks where an attacker tries to inject their own password hash to gain access to Instant Gate protected folders.
+
+## Memory Safety (Zero-Fill After Use)
+SENSITIVE DATA IN RAM:
+=======================
+
+Python string objects are immutable and cannot be explicitly erased from RAM after use. Twinclers Guard addresses this using the following techniques:
+
+- AES-256 encryption keys are derived into mutable bytearray objects instead of immutable bytes.
+- After each encryption or decryption operation, the key bytearray is immediately overwritten with zeros using ctypes.memset(), removing the key from RAM as quickly as possible.
+- Password fields in dialog boxes are cleared (SetValue empty) immediately after the password is passed to the vault engine, reducing the window during which plaintext passwords exist in application memory.
+- The active session tracker stores only a boolean unlock flag, never the password itself.
+
+## Transactional Encryption (Safe Interruption)
+ATOMIC ENCRYPTION OPERATIONS:
+==============================
+
+If power is lost, the disk fills up, or the process is killed during encryption, naive implementations can leave you with partial data where some files are encrypted and originals deleted, while others are still plaintext.
+
+Twinclers Guard uses a transactional approach:
+
+Step 1: Encrypt data and write the result to a temporary file in the same directory.
+Step 2: Only if the write succeeds completely, atomically rename the temp file to the final .twvault filename using os.replace().
+Step 3: Only after the vault file is confirmed complete, perform the secure 3-pass wipe of the original.
+
+This ensures the encryption process is all-or-nothing and your data is never left in an inconsistent or unrecoverable state.
+
+## Threat Model & Security Limitations
+While Twinclers Guard employs strong cryptography, users must understand the realistic boundaries of any software-based security tool:
+
+- The Limits of Instant Gate (0.1s Mode): Modes relying on NTFS ACLs (like Instant Gate and Anti-Delete) DO NOT encrypt data. They only tell the Windows OS to block access. If an attacker has Administrator privileges, they can forcibly take ownership of the folder and strip the locks using Windows built-in tools (like 'takeown' and 'icacls'). Furthermore, if an attacker boots your PC using a Linux Live USB, Linux will bypass Windows NTFS permissions entirely. For true defense against hardware theft or Admin-level attackers, you MUST use the AES-256 Vault mode.
+- Keyloggers and OS Compromise: If your Windows Operating System is infected with a Trojan, Keylogger, or Rootkit, Twinclers Guard CANNOT protect your master password when you type it. An infected OS means all local data is compromised.
+- Offline Dictionary Attacks: If you use a weak master password (e.g., "password123"), an attacker who steals the encrypted `.twvault` file can still use GPU-accelerated tools offline to guess your password. We use 200,000 PBKDF2 iterations to slow this down, but a strong, unique password is your primary defense.
+- Cryptographic "Nonce" Integrity: We use `os.urandom(12)` to guarantee a unique 12-byte initialization vector (Nonce) for every single AES-GCM encryption operation, safely mitigating "Nonce Reuse" vulnerabilities.
+- Data in RAM: While the application actively zeroes out cryptographic keys (`ctypes.memset`) immediately after use, decrypted file contents must temporarily exist in your system's RAM when you open them. Advanced cold-boot attacks or memory dumping by Administrator-level malware could theoretically intercept this data while it is actively being viewed.
+
+# Windows File Explorer Integration and Auto-Relock
+SEAMLESS FILE EXPLORER WORKFLOW:
+=================================
+
+1. Open This PC in Windows File Explorer.
+2. Navigate into your password-protected folder (Instant Gate or AES-256 Vault).
+3. Twinclers Guard background Explorer Watcher detects the active folder path via Windows Shell COM API.
+4. The Password Prompt window automatically appears in the foreground above File Explorer.
+5. NVDA announces: Folder [Name] is password protected. Enter password to unlock.
+6. Type your password and press Enter.
+7. The folder unlocks and File Explorer refreshes instantly to reveal your files.
+8. Work with your files freely.
+9. When you close the File Explorer window, Twinclers Guard automatically locks the folder in the background.
+10. NVDA announces: Folder [Name] has been automatically locked.
+
+# Windows Explorer Context Menu Integration
+INTEGRATING TWINCLERS GUARD INTO THE RIGHT-CLICK MENU:
+========================================================
+
+Twinclers Guard can integrate directly into the Windows File Explorer right-click context menu. Once registered, you can right-click ANY folder or file in Windows Explorer and access Twinclers Guard operations instantly, without opening the main application window first.
+
+HOW TO ENABLE:
+- Open Twinclers Guard.
+- In the File menu, select Integrate with Windows Explorer Context Menu.
+- NVDA will announce: Twinclers Guard context menu registered.
+
+HOW TO DISABLE (REMOVE):
+- Open Twinclers Guard.
+- In the File menu, select Integrate with Windows Explorer Context Menu again.
+- The menu item works as a toggle. Selecting it a second time removes the context menu.
+- NVDA will announce: Twinclers Guard context menu removed from Windows Explorer.
+
+WHAT APPEARS IN THE RIGHT-CLICK MENU:
+After registration, right-clicking any folder or file in Windows Explorer shows a Twinclers Guard submenu with 4 entries:
+
+1. Protect with Twinclers Guard
+   Immediately applies Anti-Delete protection to the selected folder or file, adds it to the Twinclers Guard list, and opens the main application window to confirm.
+
+2. Unprotect (Remove Protection)
+   Immediately removes all Twinclers Guard NTFS deny rules from the selected item.
+
+3. Add to Twinclers Guard List
+   Adds the selected item to the monitored list without applying protection immediately. You can then choose the protection mode inside the app.
+
+4. Open Twinclers Guard
+   Opens the Twinclers Guard main window without performing any operation on the selected item.
+
+HOW IT WORKS TECHNICALLY:
+The context menu entries are written to the Windows Registry under:
+  HKEY_CURRENT_USER\Software\Classes\Directory\shell\TwinclersGuard  (for folders)
+  HKEY_CURRENT_USER\Software\Classes\*\shell\TwinclersGuard          (for files)
+
+Since these keys are in HKCU (Current User), no Administrator privileges are required to register or remove them.
+
+When you select a context menu entry, Windows calls Twinclers Guard with a command-line argument:
+  --protect "D:\YourFolder"    for Protect
+  --unprotect "D:\YourFolder"  for Unprotect
+  --add "D:\YourFolder"        for Add to List
+
+
+# Complete Keyboard Shortcuts
+Navigate the entire application efficiently using your keyboard or screen reader.
+
+## Menu and Main Actions
+KEYBOARD SHORTCUTS:
+===================
+- Ctrl + O          : Add Folder to monitored list
+- Ctrl + Shift + O  : Add File to monitored list
+- Ctrl + P          : Protect / Lock selected item
+- Ctrl + U          : Unprotect / Unlock selected item
+- Ctrl + Shift + P  : Protect All items in the list
+- Ctrl + Shift + U  : Unprotect All items in the list
+- Ctrl + T          : Test Anti-Delete Protection
+- Ctrl + M          : Change Security Mode
+- Ctrl + H          : Hide / Minimize to System Tray
+- Delete            : Remove selected item from the list
+- F5                : Refresh protection status from disk
+- F1                : Open this Help Window
+- Alt + F4          : Exit Application
+
+## Navigating This Help Window
+HOW TO USE THE HELP WINDOW:
+============================
+1. Use Up Arrow and Down Arrow to navigate help topics in the TreeView on the left.
+2. Use Right Arrow to expand a topic and Left Arrow to collapse it.
+3. Press TAB to move focus to the Text Reader on the right.
+4. In the Text Reader use Arrow keys or Page Up and Page Down to read line by line.
+5. Press Shift + TAB to jump back to the TreeView.
+6. Press ESC to close this Help Window.
+
+# System Tray
+HOW TO USE SYSTEM TRAY:
+========================
+- Press Ctrl + H or minimize the window to hide Twinclers Guard into the System Tray.
+- NVDA will announce: Twinclers Guard minimized to system tray.
+- To restore: Click the shield icon in the System Tray or press Enter on it.
+- Right-click the tray icon to access quick actions: Show Window, Protect All, Unprotect All, Exit.
+
+# NVDA and Screen Reader Integration
+FIRST-CLASS ACCESSIBILITY WITH NVDA CONTROLLER CLIENT:
+=======================================================
+
+Twinclers Guard includes the official nvdaControllerClient.dll to communicate directly with NVDA:
+
+- Automatic Speech Announcements: Real-time status announcements without intrusive modal message boxes.
+- Braille Display Output: All status messages are simultaneously transmitted to connected Braille displays.
+- Native Win32 Controls: 100% accessible via MSAA and UI Automation standards.
+- Rate Limit Announcements: When too many wrong passwords are entered, NVDA announces the exact lockout duration so you always know what is happening.
+
+# Testing Anti-Delete Protection
+HOW THE IN-APP DELETE TEST WORKS:
+==================================
+1. Select any folder in the list that is currently Protected.
+2. Press Ctrl + T or select Actions then Test Anti-Delete Protection.
+3. Twinclers Guard creates a temporary test file inside the folder then attempts to delete it.
+4. Windows blocks the deletion (Access Denied), proving that the folder is completely safe.
+5. The application cleans up the test file safely and presents a success report.
+
+# Frequently Asked Questions
+FREQUENTLY ASKED QUESTIONS:
+============================
+
+Q: What is the difference between Instant Password Gate and AES-256 Military Vault?
+A: Instant Gate uses Windows NTFS Kernel security gates, ideal for large media where instant opening is crucial. AES-256 Vault physically encrypts file bytes, ideal for secret source code and credentials where data must remain unreadable even against Admin takeovers or physical disk removal.
+
+Q: Is my folder protected if the computer restarts or the app is closed?
+A: YES 100%. NTFS ACL rules and AES-256 encrypted bytes are permanently written to the filesystem.
+
+Q: Can I move my encrypted folder to another computer or another drive letter?
+A: YES. Each .twvault file carries its own self-contained cryptographic parameters. You can copy the folder anywhere and decrypt it with your master password on any computer that has Twinclers Guard installed.
+
+Q: What happens if I forget my master password?
+A: There is no recovery mechanism by design. This is the zero-knowledge guarantee. No backdoor exists. Store your master password in a secure password manager.
+
+Q: What does the app do if database.json is tampered with?
+A: Twinclers Guard detects the invalid HMAC signature immediately on startup and displays a warning. Your encrypted vault files themselves remain completely safe because their security does not depend on the database.
+
+Q: Can I translate this app into another language?
+A: Yes. Language files are located in the locales folder as simple JSON and plain text files.
+
+
+--------------------------------------------------
+SECURITY LIMITATIONS (TRANSPARENCY REPORT)
+--------------------------------------------------
+1. NTFS Owner Bypass (WRITE_DAC): Standard NTFS ACL modes (Anti-Delete, Read-Only, Full Lock) apply Deny rules to the Users group. However, Windows inherently allows the Creator/Owner of a file to modify its permissions. Therefore, NTFS modes are designed to prevent accidental deletion and block standard applications, NOT to stop a determined user with terminal access. For absolute data confidentiality, you MUST use the AES-256 Military Vault.
+2. Instant Gate Blind Spots: The Instant Gate mode automatically unlocks when you browse via Windows Explorer GUI. It does NOT detect or block access from command-line tools (CMD, PowerShell, WSL) or third-party archivers (like 7-Zip). Always use AES-256 Vault for highly sensitive data.
+

@@ -1,0 +1,863 @@
+================================================================================
+LAPORAN AUDIT PRE-FINALISASI KODE SUMBER: TWINCLERS GUARD
+================================================================================
+Target Audit : Seluruh modul Twinclers Guard (core/, gui/, locales/, build_scripts/, main.py)
+Auditor      : Lead Security Auditor & Software Architect
+Tanggal      : 17 Agustus 2026
+Dokumen      : audit_reports.txt
+Standar      : agent_rules.md & CWE/SANS Top 25
+
+--------------------------------------------------------------------------------
+1. RINGKASAN EKSEKUTIF AUDIT
+--------------------------------------------------------------------------------
+Audit menyeluruh dilakukan terhadap basis kode Twinclers Guard yang mencakup modul
+kriptografi, logika Windows NTFS Access Control List (ACL), arsitektur perangkat
+lunak, serta higienitas kode sesuai pedoman ketat agent_rules.md.
+
+Twinclers Guard menggabungkan dua model proteksi:
+1. Kontrol Akses Berbasis NTFS ACL via icacls (Anti-Delete, Anti-Rename, Read-Only,
+   Append-Only, Full Lock, Custom).
+2. Kriptografi Simetris Terotentikasi via AES-256-GCM dan PBKDF2-HMAC-SHA256
+   (Instant Password Gate dan AES-256 Military Vault).
+
+Hasil audit mengidentifikasi 17 temuan keamanan & kriptografi, 12 temuan
+arsitektur/DRY/SSOT, serta 38 pelanggaran higienitas kode (anti-AI code signs).
+
+Temuan paling kritis yang memerlukan perbaikan segera sebelum rilis publik:
+- SEC-01 (Kritis): Socket IPC TCP lokal tanpa otentikasi (Port 49152) memungkinkan
+  proses lokal tanpa hak istimewa membuka seluruh folder yang diproteksi.
+- SEC-02 (Kritis): Auto-relock AES-256 Vault memalsukan status proteksi; sistem
+  menandai folder terkunci dan bersuara berhasil mengunci, padahal file tetap
+  terekspos sebagai teks polos (plaintext) di disk.
+- SEC-03 & SEC-04 (Tinggi): Mekanisme HMAC pada database.json dapat di-bypass total
+  dengan menghapus key "_hmac", dan data yang terbukti dimodifikasi tetap dimuat
+  ke memori runtime.
+- SEC-05 (Tinggi): Kunci HMAC database diturunkan dari Windows MachineGuid pada
+  registry yang dapat dibaca oleh seluruh user non-admin di sistem.
+- SEC-07 (Tinggi): Injeksi perintah PowerShell pada fungsi pembacaan SDDL melalui
+  interpolasi path tanpa sanitasi karakter petik tunggal.
+
+--------------------------------------------------------------------------------
+2. TEMUAN KERENTANAN KEAMANAN & KRIPTOGRAFI
+--------------------------------------------------------------------------------
+
+MATRIKS KLASIFIKASI KERENTANAN:
++--------+----------+-------------------------------------------------------------+------------------------------------+
+| ID     | Severity | Deskripsi Kerentanan                                        | File & Baris                       |
++--------+----------+-------------------------------------------------------------+------------------------------------+
+| SEC-01 | Critical | Unauthenticated TCP IPC Socket Allows Arbitrary Protection  | gui/main_window.py:91-109, 134-153 |
+|        |          | Bypass & State Tampering                                    | main.py:118-128                    |
+| SEC-02 | Critical | AES-256 Vault False Relock State (Plaintext Exposed)        | core/vault_manager.py:184-193      |
+|        |          |                                                             | core/explorer_monitor.py:85-92    |
+| SEC-03 | High     | HMAC Stripping / Downgrade Attack on database.json          | core/storage.py:84-96              |
+| SEC-04 | High     | Tampered Storage Payload Loaded Despite Verification Failure| core/storage.py:93-103             |
+| SEC-05 | High     | Storage HMAC Key Derived from World-Readable MachineGuid    | core/storage.py:19-35              |
+| SEC-06 | High     | Full-File In-Memory Buffering (RAM Exhaustion DoS)          | core/vault_crypto.py:122-130, 170  |
+| SEC-07 | High     | PowerShell Injection via Unsanitized Paths in SDDL Retrieval| core/acl_manager.py:33-40          |
+| SEC-08 | High     | Windows NTFS Owner WRITE_DAC Permission Bypass              | core/acl_manager.py:82-154         |
+| SEC-09 | High     | Deny Everyone Full Lock Blocks SYSTEM, Defender & Backups   | core/acl_manager.py:123-127        |
+| SEC-10 | High     | Hardlink & Reparse Point Data Destruction in _secure_delete | core/vault_crypto.py:38-57         |
+| SEC-11 | High     | Tray Icon Unprotect-All Password Verification Bypass        | gui/tray_icon.py:102-109           |
+| SEC-12 | High     | Explorer Monitor COM Blind Spots & TOCTOU Race Condition    | core/explorer_monitor.py:45-114    |
+| SEC-13 | Medium   | Absence of Domain Separation in PBKDF2 Password/Key KDF     | core/vault_crypto.py:75-84, 97-105 |
+| SEC-14 | Medium   | XOR-Derived 3-Byte Header Obfuscation Ineffective           | core/vault_crypto.py:27-28, 59-69  |
+| SEC-15 | Medium   | 3-Pass DoD Secure Delete Ineffective on Wear-Leveled Flash  | core/vault_crypto.py:38-56         |
+| SEC-16 | Medium   | False Assurance of In-Memory Secret Zeroization in CPython  | core/vault_crypto.py:31-36, 81-83  |
+| SEC-17 | Low      | Non-Atomic Database Write Risks Truncation on Crash         | core/storage.py:125-130            |
++--------+----------+-------------------------------------------------------------+------------------------------------+
+
+--------------------------------------------------------------------------------
+DETAIL TEMUAN DAN PANDUAN PERBAIKAN (REMEDIATION)
+--------------------------------------------------------------------------------
+
+================================================================================
+[SEC-01] Unauthenticated TCP IPC Socket Allows Arbitrary Protection Bypass
+- Klasifikasi: Critical (CWE-306, CWE-284)
+- Lokasi: gui/main_window.py:91-109, 134-153; main.py:118-128
+================================================================================
+Akar Masalah:
+MainWindow.start_ipc_server membuka socket TCP lokal pada 127.0.0.1:49152 untuk
+menerima argumen CLI instance kedua. Server menerima koneksi dan langsung mem-parsing
+JSON payload tanpa otentikasi token, validasi session, atau verifikasi integritas.
+
+Bukti Kode (gui/main_window.py:91-104):
+```python
+def _listen():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', IPC_PORT))
+        s.listen()
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                data = conn.recv(4096)
+                if data:
+                    args_list = json.loads(data.decode('utf-8'))
+                    wx.CallAfter(self.process_ipc_args, args_list)
+```
+
+Pada gui/main_window.py baris 151-152:
+```python
+elif action == "unprotect":
+    self.on_unprotect_selected(None)
+```
+
+Dampak Eksploitasi:
+Skrip lokal atau proses tanpa hak admin dapat mengirim payload TCP:
+`["--unprotect", "C:\\FolderTarget"]`
+Aplikasi langsung memanggil on_unprotect_selected tanpa konfirmasi dialog. Pada
+mode proteksi NTFS standar (Anti-Delete, Read-Only, Full Lock), proteksi langsung
+dihapus seketika.
+
+Langkah Remediasi:
+1. Ganti komunikasi TCP socket mentah dengan Windows Named Pipe yang dilindungi
+   DACL khusus untuk SID pengguna aktif (`\\.\pipe\TwinclersGuard_<UserSID>`).
+2. Jika tetap memakai socket lokal, buat session token kriptografis 256-bit saat
+   startup yang disimpan di file izin terbatas `%APPDATA%\TwinclersGuard\.ipc_token`
+   dan wajib disertakan pada setiap header transmisi IPC.
+3. Tambahkan dialog konfirmasi sebelum mengeksekusi unprotect yang dipicu dari IPC.
+
+Kode Solusi Perbaikan (Named Pipe / Token Handshake):
+```python
+# core/ipc_server.py
+import os
+import json
+import secrets
+import threading
+import socket
+from core.constants import IPC_PORT, IPC_HOST
+
+class SecureIPCServer:
+    def __init__(self, callback_handler):
+        self.callback_handler = callback_handler
+        self.auth_token = secrets.token_hex(32)
+        self._token_file = os.path.join(os.getenv('APPDATA'), 'TwinclersGuard', '.ipc_auth')
+        self._write_auth_token()
+
+    def _write_auth_token(self):
+        with open(self._token_file, 'w', encoding='utf-8') as f:
+            f.write(self.auth_token)
+
+    def start(self):
+        def _server_worker():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+                server.bind((IPC_HOST, IPC_PORT))
+                server.listen(5)
+                while True:
+                    conn, _ = server.accept()
+                    with conn:
+                        conn.settimeout(2.0)
+                        data = conn.recv(8192)
+                        if not data:
+                            continue
+                        payload = json.loads(data.decode('utf-8'))
+                        if payload.get("token") == self.auth_token:
+                            self.callback_handler(payload.get("args", []))
+        t = threading.Thread(target=_server_worker, daemon=True)
+        t.start()
+```
+
+================================================================================
+[SEC-02] AES-256 Vault False Relock State (Plaintext File Exposure on Disk)
+- Klasifikasi: Critical (CWE-311, CWE-390)
+- Lokasi: core/vault_manager.py:184-193; core/explorer_monitor.py:85-92
+================================================================================
+Akar Masalah:
+Saat folder AES-256 Vault di-unlock, file didekripsi menjadi plaintext di disk.
+Ketika jendela Explorer ditutup, ExplorerMonitor memanggil `vault_mgr.lock_item(path)`
+tanpa menyertakan argumen password (password=None).
+
+Bukti Kode (core/vault_manager.py:184-193):
+```python
+elif mode == "aes256_vault":
+    if not password:
+        self.active_sessions.pop(norm_path, None)
+        storage.update_item(norm_path, status="protected")
+        return True, "Session cleared. Files remain decrypted until app provides password."
+```
+
+Pada core/explorer_monitor.py:86-89:
+```python
+ok, msg = vault_mgr.lock_item(unlocked_path)
+if ok:
+    name = os.path.basename(unlocked_path) or unlocked_path
+    speaker.speak(f"Folder {name} has been automatically locked.")
+```
+
+Dampak Eksploitasi:
+Fungsi `lock_item` mengembalikan `True`, database memperbarui status menjadi
+`protected`, GUI menampilkan status `Locked`, dan pembaca layar NVDA mengumumkan
+bahwa folder telah berhasil dikunci. Namun file fisik di disk sama sekali TIDAK
+dienkripsi ulang. Pengguna mengira datanya telah aman terenkripsi, padahal seluruh
+file rahasia tertinggal dalam keadaan plaintext di filesystem.
+
+Langkah Remediasi:
+1. Dilarang mengembalikan status `True` atau menandai `status="protected"` jika
+   proses enkripsi fisik belum selesai dijalankan.
+2. Pertahankan session key terenkripsi di memori menggunakan Windows Data Protection
+   API (`CryptProtectMemory`) selama folder dibuka, sehingga saat Explorer ditutup,
+   proses enkripsi ulang dapat dieksekusi otomatis tanpa menahan plaintext password.
+3. Jika session key tidak tersedia, tandai status sebagai `"unprotected"` atau
+   `"needs_reencryption"` dan tampilkan notifikasi peringatan kepada pengguna.
+
+Kode Solusi Perbaikan:
+```python
+# core/vault_manager.py
+def lock_item(self, path: str, password: Optional[str] = None) -> Tuple[bool, str]:
+    norm_path = storage.normalize_path(path)
+    item = storage.get_item(norm_path) or {}
+    mode = item.get("mode", "anti_delete")
+
+    if mode == "aes256_vault":
+        cached_key = self._get_cached_session_key(norm_path)
+        if not password and not cached_key:
+            storage.update_item(norm_path, status="unprotected")
+            return False, "Re-encryption failed: password required to encrypt files."
+
+        if cached_key:
+            ok, cnt, msg = VaultCrypto.encrypt_directory_with_key(norm_path, cached_key)
+            self._wipe_cached_session_key(norm_path)
+        else:
+            ok, cnt, msg = VaultCrypto.encrypt_directory(norm_path, password)
+
+        if ok:
+            self.active_sessions.pop(norm_path, None)
+            storage.update_item(norm_path, status="protected")
+            return True, f"AES-256 Vault locked & encrypted ({cnt} files)."
+        return False, msg
+```
+
+================================================================================
+[SEC-03 & SEC-04] HMAC Stripping Downgrade & Unenforced Integrity Verification
+- Klasifikasi: High (CWE-347, CWE-354, CWE-390)
+- Lokasi: core/storage.py:84-103
+================================================================================
+Akar Masalah:
+1. Pengecekan HMAC di `StorageManager.load()` bersifat opsional (`if stored_hmac:`).
+   Jika penyerang menghapus properti `"_hmac"` dari `database.json`, verifikasi
+   diabaikan sepenuhnya dan status `_hmac_tampered` tetap `False`.
+2. Jika verifikasi HMAC gagal (`_hmac_tampered = True`), fungsi hanya mencetak
+   peringatan ke konsol dan tetap memuat seluruh isi dictionary `raw` ke `self.data`.
+   Aplikasi tidak pernah memeriksa `storage.is_tampered()`, sehingga data yang
+   telah dimanipulasi tetap diproses normal.
+
+Bukti Kode (core/storage.py:85-101):
+```python
+stored_hmac = raw.pop("_hmac", None)
+if stored_hmac:
+    payload_str = json.dumps({k: v for k, v in raw.items()}, sort_keys=True, ensure_ascii=False)
+    expected_hmac = _compute_hmac(payload_str, self._machine_key)
+    if not hmac.compare_digest(stored_hmac, expected_hmac):
+        print("[Storage] WARNING: database.json HMAC mismatch — possible tampering detected!")
+        self._hmac_tampered = True
+
+if "_settings" in raw:
+    self.settings = raw.get("_settings", {"language": "en"})
+    self.data = {k: v for k, v in raw.items() if k != "_settings"}
+```
+
+Dampak Eksploitasi:
+Penyerang lokal dapat mengubah status folder, memodifikasi hash password, atau
+menambahkan entri target baru di `database.json`. Modifikasi ini langsung diterima
+oleh aplikasi tanpa proteksi integritas.
+
+Langkah Remediasi:
+1. Wajibkan keberadaan `_hmac` pada database yang tidak kosong. Jika `_hmac`
+   hilang, tandai sebagai data tidak valid / rusak.
+2. Jika verifikasi gagal, jangan muat `raw` ke `self.data`. Tolak operasi atau
+   pindahkan file ke `.corrupted` dan tampilkan dialog peringatan kepada pengguna.
+
+Kode Solusi Perbaikan:
+```python
+# core/storage.py:load()
+def load(self):
+    if not os.path.exists(self.db_path):
+        self.data, self.settings = {}, {"language": "en"}
+        return
+
+    try:
+        with open(self.db_path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+
+        if not isinstance(raw, dict):
+            raise ValueError("Invalid database format")
+
+        stored_hmac = raw.pop("_hmac", None)
+        if not stored_hmac and len(raw) > 0:
+            self._hmac_tampered = True
+            raise ValueError("HMAC signature missing")
+
+        payload_str = json.dumps({k: v for k, v in raw.items()}, sort_keys=True, ensure_ascii=False)
+        expected_hmac = _compute_hmac(payload_str, self._machine_key)
+        if not hmac.compare_digest(stored_hmac, expected_hmac):
+            self._hmac_tampered = True
+            raise ValueError("HMAC verification failed")
+
+        self.settings = raw.get("_settings", {"language": "en"})
+        self.data = {k: v for k, v in raw.items() if k != "_settings"}
+    except (OSError, json.JSONDecodeError, ValueError) as err:
+        self.data, self.settings = {}, {"language": "en"}
+        self._handle_corrupted_database(err)
+```
+
+================================================================================
+[SEC-05] Storage HMAC Key Derived from World-Readable Registry MachineGuid
+- Klasifikasi: High (CWE-321, CWE-522)
+- Lokasi: core/storage.py:19-35
+================================================================================
+Akar Masalah:
+Fungsi `_get_machine_guid()` membaca string MachineGuid dari Registry Windows
+(`HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid`). Kunci registry ini memiliki
+izin baca untuk semua pengguna standar (`Users: Read`).
+
+Bukti Kode (core/storage.py:23-28):
+```python
+key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography")
+guid, _ = winreg.QueryValueEx(key, "MachineGuid")
+winreg.CloseKey(key)
+return guid.encode('utf-8')
+```
+
+Dampak Eksploitasi:
+Setiap proses atau skrip lokal di komputer target dapat membaca MachineGuid,
+menghitung HMAC baru dari data yang telah dimanipulasi, dan menuliskan signature
+yang valid. Mekanisme tanda tangan HMAC kehilangan fungsi proteksinya.
+
+Langkah Remediasi:
+Gunakan Windows Data Protection API (DPAPI) via `CryptProtectData` untuk mengenkripsi
+master key atau mengenkripsi seluruh file database. Kunci DPAPI diturunkan dari
+kredensial login user Windows dan dilindungi oleh Local Security Authority Subsystem
+Service (LSASS).
+
+Kode Solusi Perbaikan (DPAPI Integration):
+```python
+# core/dpapi.py
+import ctypes
+from ctypes import wintypes
+
+class DATA_BLOB(ctypes.Structure):
+    _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+crypt32 = ctypes.windll.crypt32
+kernel32 = ctypes.windll.kernel32
+
+def dpapi_encrypt(data: bytes) -> bytes:
+    in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_byte)))
+    out_blob = DATA_BLOB()
+    if not crypt32.CryptProtectData(ctypes.byref(in_blob), "TwinclersKey", None, None, None, 0, ctypes.byref(out_blob)):
+        raise OSError("CryptProtectData failed")
+    result = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+    kernel32.LocalFree(out_blob.pbData)
+    return result
+
+def dpapi_decrypt(cipher_bytes: bytes) -> bytes:
+    in_blob = DATA_BLOB(len(cipher_bytes), ctypes.cast(ctypes.create_string_buffer(cipher_bytes), ctypes.POINTER(ctypes.c_byte)))
+    out_blob = DATA_BLOB()
+    if not crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)):
+        raise OSError("CryptUnprotectData failed")
+    result = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+    kernel32.LocalFree(out_blob.pbData)
+    return result
+```
+
+================================================================================
+[SEC-06] Full-File In-Memory Buffering (RAM Exhaustion / Denial of Service)
+- Klasifikasi: High (CWE-400, CWE-770)
+- Lokasi: core/vault_crypto.py:122-130, 170-175
+================================================================================
+Akar Masalah:
+`VaultCrypto.encrypt_file` dan `decrypt_file` membaca seluruh file ke dalam RAM
+menggunakan `f.read()`. Objek byte tersebut kemudian diduplikasi saat pembuatan
+ciphertext dan buffer internal OpenSSL.
+
+Bukti Kode (core/vault_crypto.py:122-130):
+```python
+with open(filepath, 'rb') as f:
+    data = f.read()
+...
+ciphertext = aesgcm.encrypt(nonce, data, None)
+```
+
+Dampak Eksploitasi:
+Enkripsi atau dekripsi pada file berukuran besar (misalnya file ISO, rekaman video,
+atau database 2 GB - 10 GB) menyebabkan konsumsi RAM melonjak drastis hingga
+memicu `MemoryError` atau terminasi proses oleh sistem operasi. Jika proses terputus
+saat enkripsi direktori, direktori akan tertinggal dalam keadaan rusak sebagian.
+
+Langkah Remediasi:
+Terapkan enkripsi streaming berbasis chunk (misalnya 64 KB per blok) dengan skema
+AEAD sequential nonce (konstruksi streaming AEAD standar).
+
+Kode Solusi Perbaikan (Chunked Streaming Envelope):
+```python
+# core/vault_crypto.py
+CHUNK_SIZE = 64 * 1024  # 64 KB chunks
+
+@classmethod
+def encrypt_file_stream(cls, src_path: str, dst_path: str, aes_key: bytes):
+    aesgcm = AESGCM(aes_key)
+    base_nonce = secrets.token_bytes(8) # 8-byte prefix + 4-byte counter
+    
+    with open(src_path, 'rb') as fin, open(dst_path, 'wb') as fout:
+        fout.write(base_nonce)
+        counter = 0
+        while True:
+            chunk = fin.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            chunk_nonce = base_nonce + counter.to_bytes(4, byteorder='big')
+            encrypted_chunk = aesgcm.encrypt(chunk_nonce, chunk, counter.to_bytes(4, 'big'))
+            fout.write(len(encrypted_chunk).to_bytes(4, byteorder='big'))
+            fout.write(encrypted_chunk)
+            counter += 1
+```
+
+================================================================================
+[SEC-07] PowerShell Injection via Unsanitized Path in SDDL Retrieval
+- Klasifikasi: High (CWE-78)
+- Lokasi: core/acl_manager.py:33-40
+================================================================================
+Akar Masalah:
+Fungsi `get_acl_sddl` menyusun perintah PowerShell menggunakan f-string literal:
+
+Bukti Kode (core/acl_manager.py:35-37):
+```python
+norm_path = os.path.abspath(path)
+ps_script = f"(Get-Acl -LiteralPath '{norm_path}').GetSecurityDescriptorSddlForm('All')"
+code, stdout, _ = cls.run_command(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script])
+```
+
+Dampak Eksploitasi:
+Jika folder atau file mengandung karakter petik tunggal (misalnya `D:\Data's Project`
+atau `test'; Start-Process calc.exe; '`), sintaks PowerShell akan terputus dan
+mengeksekusi perintah tambahan di bawah konteks hak akses user aktif.
+
+Langkah Remediasi:
+1. Ganti pemanggilan PowerShell eksternal dengan pemanggilan Win32 API native
+   `advapi32.GetNamedSecurityInfoW` dan `advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW`.
+2. Jika mempertahankan PowerShell sebagai cadangan, lakukan sanitasi petik tunggal
+   dengan mengganti `'` menjadi `''`.
+
+Kode Solusi Perbaikan (Native Win32 API SDDL):
+```python
+# core/acl_manager.py
+import ctypes
+from ctypes import wintypes
+
+advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+def get_sddl_native(path: str) -> Optional[str]:
+    p_sec_desc = wintypes.LPVOID()
+    p_sddl = wintypes.LPWSTR()
+    # OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION = 0x7
+    ret = advapi32.GetNamedSecurityInfoW(
+        path, 1, 0x7, None, None, None, None, ctypes.byref(p_sec_desc)
+    )
+    if ret != 0:
+        return None
+    try:
+        # SDDL_REVISION_1 = 1
+        if advapi32.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            p_sec_desc, 1, 0x7, ctypes.byref(p_sddl), None
+        ):
+            sddl_str = p_sddl.value
+            kernel32.LocalFree(p_sddl)
+            return sddl_str
+        return None
+    finally:
+        kernel32.LocalFree(p_sec_desc)
+```
+
+================================================================================
+[SEC-08] Windows NTFS Owner Privilege Retention (WRITE_DAC / WRITE_OWNER Bypass)
+- Klasifikasi: High (CWE-284, CWE-732)
+- Lokasi: core/acl_manager.py:82-154
+================================================================================
+Akar Masalah:
+Berdasarkan arsitektur keamanan Windows NT, akun Creator/Owner suatu file/folder
+selalu mempertahankan izin implisit `READ_CONTROL` dan `WRITE_DAC` pada objek
+buatannya. Ketika `ACLManager.protect` menetapkan Deny ACE untuk `*S-1-1-0` (Everyone),
+user pemilik file tetap dapat menghapus aturan Deny tersebut melalui perintah:
+`icacls <target> /remove:d *S-1-1-0` atau `icacls <target> /grant %USERNAME%:F`
+tanpa memerlukan hak administrator dan tanpa memasukkan password Twinclers Guard.
+
+Dampak Eksploitasi:
+Pengguna standar dapat membatalkan semua mode proteksi NTFS (Anti-Delete, Read-Only,
+Instant Gate) secara mandiri lewat terminal.
+
+Langkah Remediasi:
+1. Jelaskan dalam dokumentasi bahwa proteksi NTFS ACL adalah pembatas proteksi
+   terhadap aplikasi dan kecelakaan kerja; kerahasiaan penuh wajib menggunakan mode
+   `aes256_vault`.
+2. Sediakan opsi mode proteksi administratif yang mengubah kepemilikan objek ke
+   `BUILTIN\Administrators` atau `NT AUTHORITY\SYSTEM` dan mencabut `WRITE_DAC`.
+
+================================================================================
+[SEC-09] Deny Everyone Full Lock Blocks SYSTEM, Windows Defender, & OS Backups
+- Klasifikasi: High (CWE-284)
+- Lokasi: core/acl_manager.py:123-127
+================================================================================
+Akar Masalah:
+Pemberian ACE `*S-1-1-0:(OI)(CI)(F)` menolak seluruh akses untuk grup `Everyone`.
+Pada sistem operasi Windows, grup `Everyone` mencakup `NT AUTHORITY\SYSTEM`,
+`BUILTIN\Administrators`, dan seluruh service background.
+
+Dampak Eksploitasi:
+1. Windows Defender dan antivirus pihak ketiga gagal memindai file di folder tersebut.
+2. Volume Shadow Copy (VSS) dan utilitas backup Windows gagal membaca direktori.
+3. Administrator terkunci dari foldernya sendiri jika file database konfigurasi rusak.
+
+Langkah Remediasi:
+Alihkan target Deny ACE ke grup `BUILTIN\Users` (`S-1-5-32-545`) atau SID spesifik
+pengguna aktif, sambil tetap memberikan hak Allow eksplisit kepada `SYSTEM` (`S-1-5-18`)
+dan `Administrators` (`S-1-5-32-544`).
+
+================================================================================
+[SEC-10] Hardlink & Reparse Point (Symlink) Target Destruction in _secure_delete
+- Klasifikasi: High (CWE-59, CWE-459)
+- Lokasi: core/vault_crypto.py:38-57
+================================================================================
+Akar Masalah:
+Fungsi `_secure_delete` membuka path target menggunakan mode `'r+b'` dan menuliskan
+3 pass data acak sebelum memanggil `os.remove`.
+Jika path merupakan NTFS Hardlink, penulisan acak akan merusak isi data seluruh file
+yang tertaut pada master inode tersebut. Jika file terkunci atau berstatus read-only,
+`open('r+b')` memicu `OSError` yang ditelan oleh blok `except OSError: pass`, dan
+penghapusan `os.remove` gagal tanpa menimbulkan exception, membiarkan file plaintext
+asli tertinggal di disk bersama file terenkripsi.
+
+Langkah Remediasi:
+1. Periksa `os.path.islink(filepath)` atau atribut `FILE_ATTRIBUTE_REPARSE_POINT`.
+   Jika terdeteksi link/junction, hapus link secara langsung tanpa melakukan overwrite data.
+2. Periksa jumlah hardlink (`nNumberOfLinks`). Jika lebih dari 1, langsung lakukan unlink.
+3. Pastikan penghapusan file diverifikasi; jika gagal hapus file plaintext, batalkan
+   operasi enkripsi dan bersihkan file `.twvault`.
+
+================================================================================
+[SEC-11] Tray Icon Unprotect-All Password Verification Bypass
+- Klasifikasi: High (CWE-306)
+- Lokasi: gui/tray_icon.py:102-109
+================================================================================
+Akar Masalah:
+Menu konteks System Tray menyediakan opsi "Unprotect All" yang memanggil fungsi
+`acl_engine.unprotect()` secara langsung terhadap seluruh entri database tanpa
+melakukan verifikasi apakah entri tersebut berstatus password vault atau meminta
+konfirmasi pengguna.
+
+Bukti Kode (gui/tray_icon.py:102-108):
+```python
+def on_unprotect_all(self, event):
+    items = storage.get_all()
+    for it in items:
+        acl_engine.unprotect(it["path"])
+        storage.update_item(it["path"], status="unprotected")
+    self.frame.refresh_list()
+    speaker.speak(_("ANNOUNCE_UNPROTECT_ALL"))
+```
+
+Dampak Eksploitasi:
+Setiap pengguna yang mengakses tray icon dapat membuka proteksi seluruh folder
+dengan dua klik mouse tanpa perlu memasukkan password proteksi.
+
+Langkah Remediasi:
+Delegasikan aksi tray icon langsung ke `MainWindow.on_unprotect_all()` yang
+mengecualikan folder berpassword dan mewajibkan konfirmasi.
+
+================================================================================
+[SEC-12] Explorer Monitor COM Blind Spots & TOCTOU Race Condition
+- Klasifikasi: High (CWE-362)
+- Lokasi: core/explorer_monitor.py:45-114
+================================================================================
+Akar Masalah:
+`ExplorerMonitor` menggunakan polling loop interval 0.2 detik ke antarmuka COM
+`Shell.Application.Windows()`.
+1. Mekanisme ini hanya memantau jendela GUI Windows Explorer dan tidak mendeteksi
+   akses dari Command Prompt, PowerShell, WSL, 7-Zip, atau aplikasi pihak ketiga.
+2. Pada mode `instant_gate`, penghapusan Deny ACE saat folder terbuka membuat folder
+   terbuka secara global untuk semua proses di sistem operasi selama jendela aktif.
+
+Langkah Remediasi:
+Dokumentasikan secara tegas bahwa mode Instant Gate adalah alat bantu navigasi
+Explorer, sedangkan keamanan data terhadap proses eksternal wajib menggunakan
+AES-256 Vault.
+
+================================================================================
+[SEC-13] Absence of Domain Separation in PBKDF2 Password/Key KDF
+- Klasifikasi: Medium (CWE-327)
+- Lokasi: core/vault_crypto.py:75-84, 97-105
+================================================================================
+Akar Masalah:
+`VaultCrypto.hash_password` dan `VaultCrypto._derive_aes_key` menggunakan konfigurasi
+PBKDF2-HMAC-SHA256 yang identik (SHA-256, 32-byte output, 200.000 iterasi).
+Jika salt verifikasi dan salt enkripsi menggunakan nilai yang sama, hash verifikasi
+yang disimpan di `database.json` identik dengan kunci AES-256 yang dipakai mendekripsi file.
+
+Langkah Remediasi:
+Terapkan domain separation string:
+- Kunci Enkripsi: `salt = b"enc:" + raw_salt`
+- Hash Otentikasi: `salt = b"auth:" + raw_salt`
+
+================================================================================
+[SEC-14] XOR-Derived 3-Byte Header Obfuscation Ineffective
+- Klasifikasi: Medium (CWE-656)
+- Lokasi: core/vault_crypto.py:27-28, 59-69
+================================================================================
+Akar Masalah:
+Header 3-byte dibentuk dari XOR `b"TW1"` dengan 3 byte pertama salt:
+`bytes(a ^ b for a, b in zip(cls._HEADER_PREFIX, salt[:3]))`
+Karena salt disimpan langsung setelah header, siapa pun dapat menghitung
+`header[i] ^ salt[i]` untuk mengidentifikasi format file secara instan.
+
+Langkah Remediasi:
+Hapus teknik XOR semu; gunakan binary header terstruktur standar dengan metadata
+versi format, dan serahkan validasi ke 16-byte authentication tag AES-GCM.
+
+================================================================================
+[SEC-15] 3-Pass DoD Secure Delete Ineffective on Wear-Leveled Flash/SSD Storage
+- Klasifikasi: Medium (CWE-459)
+- Lokasi: core/vault_crypto.py:38-56
+================================================================================
+Akar Masalah:
+Pada media penyimpanan modern (SSD / NVMe), kontroler Flash Translation Layer (FTL)
+mengalokasikan blok penulisan baru saat penulisan in-place terjadi. Overwrite 3-pass
+hanya membebani write endurance flash tanpa menghapus blok fisik lama.
+
+Langkah Remediasi:
+Gunakan single-pass fill sebelum unlinking dan informasikan kepada pengguna bahwa
+proteksi level hardware membutuhkan Full Disk Encryption (BitLocker).
+
+================================================================================
+[SEC-16] False Assurance of In-Memory Secret Zeroization in CPython
+- Klasifikasi: Medium (CWE-244)
+- Lokasi: core/vault_crypto.py:31-36, 81-83; gui/password_dialog.py:103-105
+================================================================================
+Akar Masalah:
+`ctypes.memset` pada `bytearray` tidak membersihkan string immutable Python
+(`password.encode('utf-8')`) atau objek `bytes` yang dibuat saat inisialisasi `AESGCM(bytes(key_ba))`.
+
+Langkah Remediasi:
+Hapus klaim militer/DoD RAM zeroization yang tidak realistis pada runtime CPython.
+
+================================================================================
+[SEC-17] Non-Atomic Database File Save Risks Truncation on Crash
+- Klasifikasi: Low (CWE-362)
+- Lokasi: core/storage.py:125-130
+================================================================================
+Akar Masalah:
+`StorageManager.save()` membuka `self.db_path` secara langsung dengan mode `'w'`.
+Jika listrik padam atau proses terhenti saat penulisan, file `database.json` akan
+terpotong menjadi 0 byte.
+
+Langkah Remediasi:
+Tulis ke file temporary terlebih dahulu (`tempfile.mkstemp`), flush dan fsync,
+kemudian commit secara atomik menggunakan `os.replace()`.
+
+--------------------------------------------------------------------------------
+3. EVALUASI ARSITEKTUR, DRY & SINGLE SOURCE OF TRUTH (SSOT)
+--------------------------------------------------------------------------------
+
+MATRIKS TEMUAN ARSITEKTUR:
++---------+----------+------------------------------------------------------------+------------------------------------+
+| ID      | Severity | Deskripsi Temuan                                           | File & Baris                       |
++---------+----------+------------------------------------------------------------+------------------------------------+
+| DRY-01  | High     | Duplikasi Logika Eksekusi Proteksi/Unproteksi di 7 Handler | gui/main_window.py:521-644         |
+|         |          | UI & Tray                                                  | gui/tray_icon.py:94-109            |
+| SSOT-01 | High     | Definisi Mode Terfragmentasi di 8 Berkas (Magic Strings)   | main.py:83; core/acl_manager.py:99 |
+|         |          | Argparse CLI Kehilangan 3 Mode Utama                       | gui/dialogs.py:130, 237            |
+| ARC-01  | High     | God-Class MainWindow (UI + IPC Socket + Parser + Business) | gui/main_window.py:85-161, 512-645 |
+| ARC-02  | High     | Pelanggaran Abstraksi & Bypass Vault pada Tray Icon        | gui/tray_icon.py:94-109            |
+| SSOT-02 | Medium   | Duplikasi File Dokumentasi 395 Baris (help.txt vs locales) | help.txt; locales/help_en.txt      |
+| SSOT-03 | Medium   | Hardcoded IPC Port (49152) di Berbagai Modul               | main.py:124; gui/main_window.py:89 |
+| DRY-02  | Medium   | Duplikasi Skema Item Default pada add_item dan update_item | core/storage.py:158-168, 182-192   |
+| DRY-03  | Medium   | Duplikasi Traversal Direktori dan Filter File .twvault     | core/vault_crypto.py:223, 249      |
+|         |          |                                                            | core/vault_manager.py:95           |
+| SRP-01  | Medium   | ACLManager Mencampur Logika DACL NTFS dan Registry Shell   | core/acl_manager.py:216-305        |
+| SRP-02  | Medium   | StorageManager Mencampur I/O, Registry GUID, dan icacls    | core/storage.py:19-58              |
+| COMP-01 | Medium   | Duplikasi Logika Pembukaan Sub-Dialog Konfigurasi Mode     | gui/dialogs.py:208-222, 297-311    |
+| SSOT-04 | Low      | File Kosong scratch_wiki.txt Tanpa Fungsi di Root Repo     | scratch_wiki.txt (0 byte)          |
++---------+----------+------------------------------------------------------------+------------------------------------+
+
+ANALISIS MENDALAM TEMUAN ARSITEKTUR:
+
+1. Duplikasi Logika Proteksi & Unproteksi (DRY-01)
+   Logika percabangan antara mode password (`instant_gate`, `aes256_vault`) dan
+   mode ACL biasa diduplikasi pada 7 fungsi:
+   - `gui/main_window.py`: `_process_add_item` (baris 521), `on_protect_selected` (540),
+     `on_unprotect_selected` (576), `on_protect_all` (604), `on_unprotect_all` (624)
+   - `gui/tray_icon.py`: `on_protect_all` (94), `on_unprotect_all` (102)
+   Inkonsistensi implementasi pada `tray_icon.py` memotong pemeriksaan password dan
+   merusak integritas sistem.
+   Solusi: Ekstraksi seluruh operasi proteksi ke dalam `core/protection_service.py`.
+
+2. Fragmentasi Definisi Mode Keamanan (SSOT-01)
+   Daftar mode keamanan ditulis berulang sebagai string mentah di 8 file berbeda:
+   - `main.py:83-86` (Pilihan CLI argparse hanya berisi 5 mode)
+   - `core/acl_manager.py:63-73` & `99-153`
+   - `core/vault_manager.py:71, 101, 121, 135, 142, 158, 174, 184`
+   - `gui/dialogs.py:130-139` & `237-246`
+   - `gui/main_window.py:338-347`
+   - `locales/en.json:65-73` & `locales/id.json:65-73`
+   Akibat nyata: Perintah CLI `python main.py --mode instant_gate` ditolak oleh
+   argparse karena mode tersebut tidak terdaftar di choices CLI.
+   Solusi: Buat Enum terpusat `ProtectionMode` di `core/constants.py`.
+
+3. Duplikasi File Dokumentasi 395 Baris (SSOT-02)
+   File `help.txt` (22.831 bytes) pada root repository merupakan salinan identik
+   dari `locales/help_en.txt`. Fungsi `core/help_parser.py:27-49` mempertahankan
+   4 lapis fallback path hanya untuk mendukung duplikasi file ini.
+   Solusi: Hapus `help.txt` di root repository dan arahkan `help_parser.py` mencari
+   ke direktori `locales/help_{lang}.txt`.
+
+4. God-Class MainWindow (ARC-01)
+   Modul `gui/main_window.py` (709 baris) memegang terlalu banyak tanggung jawab:
+   tampilan UI, thread listener socket TCP IPC, parser CLI, manipulasi engine ACL,
+   serta pemanggilan registry repair.
+   Solusi: Pisahkan menjadi `core/ipc_server.py`, `core/protection_service.py`,
+   dan `gui/main_window.py` yang murni menangani tampilan antarmuka.
+
+TARGET STRUKTUR ARSITEKTUR MODULAR:
+```
+Twinclers/
+├── core/
+│   ├── __init__.py
+│   ├── constants.py          <-- SSOT: ProtectionMode Enum, IPC_PORT, REG_KEYS
+│   ├── models.py             <-- Dataclass / TypedDict: ItemRecord, CustomRule
+│   ├── acl_manager.py        <-- Murni operasi DACL NTFS & icacls engine
+│   ├── shell_integration.py  <-- Integrasi Context Menu Explorer & Registry Repair
+│   ├── vault_crypto.py       <-- AES-256-GCM, PBKDF2, Chunked Streaming AEAD
+│   ├── vault_manager.py      <-- Manajemen session Instant Gate & AES Vault
+│   ├── protection_service.py <-- Service orkestrasi proteksi terpusat
+│   ├── storage.py            <-- Storage CRUD atomik
+│   ├── sys_utils.py          <-- Runner subprocess (CREATE_NO_WINDOW) & Win32 API
+│   ├── ipc_server.py         <-- IPC Single-Instance listener
+│   ├── i18n.py               <-- Loader terjemahan multi-bahasa
+│   ├── help_parser.py        <-- Parser file bantuan hirarkis
+│   └── nvda_speaker.py       <-- Integrasi pembaca layar NVDA & SAPI TTS
+├── gui/
+│   ├── __init__.py
+│   ├── main_window.py        <-- GUI View Frame murni
+│   ├── dialogs.py            <-- Dialog input dan konfigurasi
+│   ├── password_dialog.py    <-- Dialog input password
+│   ├── help_dialog.py        <-- Dialog penampil bantuan
+│   └── tray_icon.py          <-- System tray icon (terhubung ke ProtectionService)
+├── locales/
+│   ├── en.json / id.json
+│   ├── help_en.txt / help_id.txt
+├── build_scripts/
+├── main.py                   <-- Entry point & CLI parser berbasis ProtectionMode
+```
+
+--------------------------------------------------------------------------------
+4. AUDIT KEPATUHAN ATURAN KODE (AGENT_RULES.MD & ANTI-AI CODE SIGNS)
+--------------------------------------------------------------------------------
+
+Hasil audit kepatuhan terhadap standar penulisan kode (agent_rules.md):
+
+1. Blind Defensive Programming (Broad `except Exception: pass`)
+   Ditemukan 11 blok penanganan exception yang menelan error secara diam-diam:
+   - `core/nvda_speaker.py`: Baris 33, 49, 60, 69, 88, 101, 111, 121, 129, 137
+     (10 metode menangkap `Exception` dan menjalankan `pass`, menyembunyikan kegagalan DLL).
+   - `core/explorer_monitor.py:64-67, 110-111` (Menelan error COM dan thread crash).
+   - `core/vault_crypto.py:50-56, 206-207` (Menelan error I/O disk dan menyamarkannya
+     sebagai salah password).
+   - `main.py:126-127` (Menelan kegagalan koneksi socket IPC).
+   - `gui/main_window.py:107-108, 476-477` (Menelan error deserialisasi JSON IPC).
+   - `gui/tray_icon.py:25-26, 114-115` (Menelan error penghapusan tray icon).
+   Perbaikan: Tangani exception secara spesifik (`OSError`, `json.JSONDecodeError`,
+   `cryptography.exceptions.InvalidTag`, `pythoncom.com_error`) atau biarkan program
+   fail-fast dengan pencatatan log diagnostik.
+
+2. Docstring Redundan / Tautologis (28 Kasus)
+   Ditemukan docstring yang sekadar mengulang nama fungsi tanpa memberikan konteks:
+   - `gui/main_window.py`: 22 docstring (baris 114, 163, 181, 253, 272, 302, 311,
+     319, 327, 334, 380, 387, 398, 412, 420, 440, 444, 448, 458, 463, 470, 482).
+     Contoh: `def on_list_key_down(self, event): """Handles keyboard keys on ListCtrl."""`
+   - `main.py:29`: `def run_gui(...): """Runs the native wxPython graphical user interface."""`
+   - `core/explorer_monitor.py:29, 37`: `"""Starts the background monitoring thread."""`
+   - `core/i18n.py:87`: `"""Global helper for text translation."""`
+   Perbaikan: Hapus seluruh docstring tautologis; pertahankan docstring hanya pada
+   fungsi yang membutuhkan penjelasan parameter atau keputusan desain khusus.
+
+3. Komentar Berlebihan (Over-Commenting WHAT vs WHY)
+   Ditemukan 45+ komentar yang menjelaskan sintaks dasar atau dekorasi banner visual:
+   - `core/__init__.py:1` (`# core package`) & `gui/__init__.py:1` (`# gui package`).
+   - `main.py:94, 100, 109, 130`: Header sekat ASCII seperti `# --- Uninstaller Mode ---`.
+   - `core/acl_manager.py:12, 59, 96, 99, 105, 112, 118, 124, 130`: Penjelasan sintaks
+     seperti `# Cek tipe deny`, `# Kunci total akses`, `# Aturan custom sesuai checkbox`.
+   - `core/vault_manager.py:16, 39, 63, 123, 133, 137, 153`: Komentar perbaikan berulang
+     seperti `# VLN-07: TIDAK simpan password — hanya session flag`.
+   Perbaikan: Hapus komentar naratif sintaks dasar dan bersihkan banner visual.
+
+4. Nama Variabel Generik dan Malas (35+ Kasus)
+   Ditemukan penggunaan variabel satu huruf atau nama tidak deskriptif:
+   - `main.py:104, 122`: `it`, `s`.
+   - `core/acl_manager.py:162, 259-276`: `code1`, `code2`, `s1, s2, s3, s4, s5`.
+   - `core/explorer_monitor.py:56, 80, 86`: `w`, `p`, `ok, msg`.
+   - `core/vault_crypto.py:62, 133, 225, 231`: `a, b`, `tmp_fd, tmp_path`, `fname, fpath`.
+   - `gui/dialogs.py:173, 195, 210, 218, 280, 299`: `dlg` (diulang 7 kali), `idx`, `m_id`.
+   - `gui/main_window.py`: `t`, `it`, `prot_cnt`, `idx`, `conn, addr`, `data`, `dlg`.
+   - `gui/password_dialog.py:13, 28, 53, 58, 65, 70, 77`: `pwd`, `lbl_p1`, `self.txt_p1`, `p1, p2`.
+   Perbaikan: Ganti seluruh nama variabel menjadi eksplisit dan bernilai semantik
+   (misal: `item_index`, `ipc_client`, `password_prompt_dlg`, `new_password_input`).
+
+5. Pelanggaran Kode Idiomatis & Bug Kolom ListCtrl
+   - `gui/main_window.py:164-178`: Loop berbasis indeks C-style (`for i in range(...)`)
+     mengambil `GetItemText(i, 2)` (kolom status) alih-alih kolom 0 (kolom path).
+     Perbandingan path dengan status proteksi selalu gagal mencocokkan baris.
+   - `core/help_parser.py:77-82`: Iterasi karakter manual untuk menghitung karakter `#`.
+     Perbaikan: Gunakan `len(stripped) - len(stripped.lstrip('#'))`.
+
+6. Over-Engineering & Boilerplate Kelas Statis
+   Kelas `ACLManager`, `VaultCrypto`, dan `HelpParser` hanya berisi kumpulan method
+   statis/classmethod tanpa state objek, tetapi diinstansiasi menjadi objek semu
+   seperti `acl_engine = ACLManager()`. Metode `HelpItem.to_dict` tidak pernah dipanggil.
+   Perbaikan: Ubah menjadi fungsi level modul yang bersih dan hapus method yang tidak terpakai.
+
+--------------------------------------------------------------------------------
+5. RENCANA TINDAK LANJUT & PRIORITAS PERBAIKAN (REMEDIATION ROADMAP)
+--------------------------------------------------------------------------------
+
+PRIORITAS 1: KRITIS & MENDESAK (PRA-RILIS)
+Target: Mengeliminasi kerentanan keamanan tingkat Critical dan High sebelum build produksi.
+1. [SEC-01] Amankan IPC Server: Ganti raw TCP socket dengan Named Pipe terotentikasi
+   SID atau terapkan handshake token acak 256-bit di `core/ipc_server.py`.
+2. [SEC-02] Perbaiki Logika Relock AES-256 Vault: Tolak status "protected" jika file
+   belum terenkripsi fisik; amankan kunci sesi di memori menggunakan DPAPI / CryptProtectMemory.
+3. [SEC-03, 04, 05] Amankan Storage Integrity: Ganti Registry MachineGuid dengan
+   Windows DPAPI (`CryptProtectData`), wajibkan verifikasi HMAC, dan tolak memuat file rusak.
+4. [SEC-07] Sanitasi SDDL Retrieval: Ganti eksekusi PowerShell dengan native Win32 API
+   `advapi32.GetNamedSecurityInfoW` atau sanitasi karakter petik tunggal.
+5. [SEC-11 & ARC-02] Tutup Celah Tray Icon: Hapus pemanggilan bypass di `gui/tray_icon.py`
+   dan delegasikan seluruh aksi proteksi ke service controller.
+6. [SEC-10] Amankan Penghapusan File: Validasi symlink, junction, dan jumlah hardlink
+   sebelum memproses penghapusan aman pada `core/vault_crypto.py`.
+
+PRIORITAS 2: INTEGRITAS DATA & ARSITEKTUR
+Target: Menghilangkan duplikasi logika, menegakkan SSOT, dan memisahkan modul (SRP).
+1. [SSOT-01] Buat `core/constants.py` yang memuat Enum `ProtectionMode`, konstanta
+   port IPC, serta kunci Registry context menu.
+2. [DRY-01] Bangun `core/protection_service.py` untuk memusatkan logika proteksi,
+   unproteksi, dan sinkronisasi database.
+3. [SSOT-02 & 04] Bersihkan Repository Root: Hapus file duplikat `help.txt` (pertahankan
+   `locales/help_en.txt` dan `locales/help_id.txt`) serta hapus `scratch_wiki.txt`.
+4. [DRY-02 & 03] Standarisasi Skema Data: Ekstraksi fungsi pembuat record item default
+   di `core/storage.py` dan helper pencarian file vault di `core/vault_crypto.py`.
+5. [SRP-01 & 02] Dekopling Modul: Pindahkan integrasi Registry context menu ke
+   `core/shell_integration.py`, dan pindahkan helper eksekusi sistem ke `core/sys_utils.py`.
+6. [SEC-06] Terapkan Enkripsi Streaming: Perbarui `VaultCrypto` menggunakan chunked
+   AEAD streaming guna mencegah RAM exhaustion pada file gigabyte.
+7. [SEC-17] Terapkan Atomic File Save pada `StorageManager.save()`.
+
+PRIORITAS 3: REFACTORING HIGIENITAS KODE & STANDARISASI
+Target: Memenuhi 100% standar agent_rules.md untuk keterbacaan dan performa kode.
+1. Perbaiki bug pemilihan kolom ListCtrl di `gui/main_window.py:select_path_in_list` (kolom 2 -> kolom 0).
+2. Hapus 11 blok `except Exception: pass` dan gantikan dengan exception spesifik serta log diagnostik.
+3. Hapus 28 docstring tautologis di seluruh modul UI dan core.
+4. Bersihkan 45+ komentar naratif yang menjelaskan sintaks dasar dan hapus sekat banner visual.
+5. Refaktorisasi nama variabel generik (`it`, `dlg`, `p1`, `s1..s5`, `w`, `p`) menjadi nama yang deskriptif.
+6. Hapus kelas statis semu pada `acl_manager.py` dan `help_parser.py`, serta hapus method mati `HelpItem.to_dict`.
+7. Ubah iterasi karakter `#` di `help_parser.py` menjadi pemanggilan string idiomatis `lstrip('#')`.
+
+================================================================================
+AKHIR DOKUMEN AUDIT — TWINCLERS GUARD
+================================================================================

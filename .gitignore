@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+*.ipc_auth
+
+# Build outputs
+dist/
+build/
+Output/
+*.build/
+*.dist/
+*.exe
+
+# IDE and Editor
+.vscode/
+.idea/
+
+# Sensitive or local scripts
+scratch_*.py
+update.json
+
+# Agent and Local Dev
+.agents/

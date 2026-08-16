@@ -1,0 +1,415 @@
+# Selamat Datang di Twinclers Guard
+SELAMAT DATANG DI TWINCLERS GUARD!
+====================================
+
+Twinclers Guard adalah utilitas keamanan desktop Windows native yang dirancang untuk melindungi folder sensitif, source code, media, dan dokumen penting dari penghapusan tidak sengaja, modifikasi tanpa izin, maupun akses tidak sah.
+
+Keunggulan utamanya adalah perpaduan unik antara:
+1. Windows NTFS Kernel-Level Access Control Lists (ACL) untuk keamanan instan 0,01 detik.
+2. Enkripsi Kriptografi AES-256-GCM Militer dengan PBKDF2-HMAC-SHA256 (200.000 iterasi) untuk privasi zero-knowledge.
+
+KEMAMPUAN UTAMA:
+- 8 Mode Proteksi Komprehensif dari Anti-Hapus Ringan hingga Brankas Enkripsi Militer.
+- Watcher Windows Explorer Aktif: Otomatis mendeteksi saat Anda masuk ke folder berpassword.
+- Smart Auto-Relock: Saat File Explorer ditutup, folder otomatis dikunci kembali di background.
+- Dukungan Penuh NVDA Screen Reader dengan speech dan Braille real-time.
+- Integrasi System Tray: Sembunyikan dengan Ctrl+H.
+
+# Mode Proteksi
+Twinclers Guard menyediakan 8 mode keamanan untuk berbagai kebutuhan dan performa.
+
+## 1. Anti-Hapus Tidak Sengaja (Direkomendasikan Harian)
+MODE: ANTI-HAPUS TIDAK SENGAJA (DEFAULT)
+==========================================
+
+Dirancang untuk folder kerja aktif, repositori proyek, dan dokumen harian.
+
+CARA KERJA:
+Twinclers Guard menerapkan aturan Deny NTFS Kernel untuk DELETE dan DELETE_CHILD dengan flag inheritance OI (Object Inherit) dan CI (Container Inherit) yang menargetkan SID Everyone (S-1-1-0).
+
+APA YANG BISA ANDA LAKUKAN:
+- Membuka, membaca, dan menelusuri semua file dan subfolder.
+- Mengedit dan menyimpan perubahan pada file yang ada.
+- Membuat file dan subfolder baru di dalamnya.
+
+APA YANG DIBLOKIR WINDOWS:
+- Menghapus file atau subfolder manapun di dalam (Delete atau Shift + Delete).
+- Menghapus folder root itu sendiri.
+
+CONTOH PRAKTIS:
+Anda sedang mengerjakan proyek Git di D:\MyProject. Anda ingin kebebasan penuh untuk menulis kode, kompilasi, dan menambah aset, tetapi ingin kekebalan penuh dari Shift + Delete yang tidak sengaja di File Explorer. Mode Anti-Hapus memberikan alur kerja 100% normal tanpa beban performa sama sekali.
+
+## 2. Gerbang Password Instan (Kunci 0,01 Detik)
+MODE: GERBANG PASSWORD INSTAN
+===============================
+
+Dirancang untuk perpustakaan media besar, proyek video editing 4K, koleksi musik, dan folder aktif berukuran besar (50 GB hingga 2 TB ke atas).
+
+CARA KERJA:
+Alih-alih mengenkripsi gigabyte data byte per byte, Instant Password Gate mengunci Gerbang Akses Kernel NTFS dalam 0,01 detik. Saat terkunci, Windows menolak semua permintaan baca dan penelusuran. Saat dibuka dengan password master, akses diberikan seketika.
+
+INTEGRASI WINDOWS EXPLORER:
+- Masuk ke folder di File Explorer: Password Prompt otomatis muncul.
+- Ketik password: Folder terbuka dalam 0,01 detik.
+- Tutup File Explorer: Folder otomatis dikunci kembali.
+
+CONTOH PRAKTIS:
+Anda punya 120 GB video keluarga di D:\MediaKeluarga. Dengan Instant Gate, Anda memasukkan password dan langsung bisa memutar video 4K tanpa menunggu dekripsi berat. Setelah jendela Explorer ditutup, folder langsung terkunci.
+
+## 3. Brankas Militer AES-256 (Terenkripsi)
+MODE: BRANKAS ENKRIPSI MILITER AES-256-GCM
+============================================
+
+Untuk kerahasiaan maksimal: source code, algoritma proprietary, API token, dompet kripto, catatan keuangan, dan kontrak rahasia.
+
+CARA KERJA:
+Setiap file dienkripsi byte per byte menggunakan cipher AES-256-GCM terotentikasi. Derivasi kunci menggunakan PBKDF2-HMAC-SHA256 dengan 200.000 iterasi dan salt acak 16-byte kriptografis yang unik per file.
+
+MENGAPA TIDAK BISA DITEMBUS:
+- Izin NTFS secara teori bisa direset oleh Administrator yang mengambil kepemilikan drive.
+- Namun, data terenkripsi AES-256-GCM (.twvault) adalah ciphertext matematis murni.
+- Meskipun Administrator mengambil kepemilikan, membuka CMD, menjalankan PowerShell, atau mencabut hard drive ke mesin lain, mereka hanya akan melihat noise acak yang tidak bisa dibaca.
+- Tanpa password master Anda, memecahkan kunci AES 256-bit dengan PBKDF2 (200.000 iterasi) membutuhkan miliaran tahun bahkan dengan superkomputer modern.
+
+PORTABILITAS (TIDAK MEMBUTUHKAN DATABASE):
+- Setiap file terenkripsi (.twvault) membawa parameter kriptografis sendiri di dalam headernya.
+- Anda bisa menyalin folder terenkripsi ke USB, PC lain, atau drive letter berbeda (misalnya E:\testing dan bukan D:\testing), dan tetap bisa didekripsi hanya dengan password master.
+- Tidak perlu database.json di komputer baru.
+
+CONTOH PRAKTIS:
+Anda punya kode Python dan C++ sensitif, kunci SSH pribadi, dan backup database klien di D:\ProyekRahasia. Dengan AES-256 Vault, data terenkripsi secara fisik di disk. Jika laptop dicuri atau diinspeksi, data Anda tetap mustahil dibaca secara matematis.
+
+## 4. Mode Anti-Rename dan Pindah
+MODE: ANTI-RENAME DAN PINDAH PLUS ANTI-HAPUS
+==============================================
+
+Mencegah penghapusan sekaligus penggantian nama atau pemindahan folder dan file.
+
+CARA KERJA:
+Membatasi WRITE_ATTRIBUTES dan WRITE_EXTENDED_ATTRIBUTES bersama izin DELETE dalam NTFS DACL.
+
+CONTOH PRAKTIS:
+Folder server bersama atau path direktori tetap di mana skrip build otomatis atau layanan mengharapkan nama folder dan file selalu tidak berubah.
+
+## 5. Mode Append-Only (Mode Log)
+MODE: SAFE LOG APPEND-ONLY
+============================
+
+Ideal untuk log audit, direktori rekaman, riwayat transaksi, dan footage pengawasan.
+
+APA YANG BISA DILAKUKAN:
+- Terus membuat file dan log baru.
+- Membaca file yang ada.
+
+APA YANG DIBLOKIR:
+- Mengedit, menimpa, memodifikasi, atau menghapus file yang sudah ada.
+
+## 6. Mode Read-Only (Pembekuan Total)
+MODE: PEMBEKUAN TOTAL READ-ONLY
+=================================
+
+Terbaik untuk arsip proyek yang telah selesai, buku yang diterbitkan, master disk image, dan catatan pajak final.
+- Akses baca dan telusuri penuh.
+- Semua modifikasi, penambahan, dan penghapusan diblokir permanen sampai dinonaktifkan.
+
+## 7. Mode Full Lock
+MODE: KUNCI AKSES PENUH
+=========================
+
+Pemblokiran akses total. Memblokir semua permintaan baca, tulis, telusuri, dan eksekusi untuk semua pengguna sampai dibuka via Twinclers Guard.
+
+## 8. Aturan Granular Kustom
+MODE: ATURAN GRANULAR KUSTOM
+==============================
+
+Memungkinkan Anda mengatur izin NTFS tertentu secara individual via checklist visual:
+- Tolak Penghapusan File dan Folder
+- Tolak Penggantian Nama dan Pemindahan
+- Tolak Modifikasi File yang Ada
+- Tolak Pembuatan File dan Folder Baru
+- Terapkan Rekursif ke Subfolder (Inheritance)
+
+# Spesifikasi Kriptografi dan Keamanan
+DI BALIK LAYAR: ARSITEKTUR DAN STANDAR
+========================================
+
+Twinclers Guard mengimplementasikan standar tertinggi industri keamanan siber.
+
+## Cipher Simetris (AES-256-GCM)
+ENKRIPSI TEROTENTIKASI AES-256-GCM:
+=====================================
+
+- Algoritma: AES-256-GCM (Advanced Encryption Standard dalam mode Galois/Counter)
+- Panjang Kunci: 256 bit (32 byte)
+- Nonce / IV: 96 bit (12 byte) dibuat unik via secrets.token_bytes() untuk setiap operasi enkripsi.
+- Enkripsi Terotentikasi: GCM menyediakan verifikasi integritas bawaan. Setiap manipulasi ciphertext langsung terdeteksi saat dekripsi. Bahkan satu bit yang dibalik pun akan menyebabkan dekripsi gagal total.
+- 100 file dengan password sama: Setiap file mendapat salt 16-byte dan nonce 12-byte acak sendiri, menghasilkan kunci AES berbeda dan ciphertext berbeda meskipun dua file berisi konten identik.
+
+## Fungsi Derivasi Kunci (PBKDF2-HMAC-SHA256)
+DETAIL FUNGSI DERIVASI KUNCI:
+==============================
+
+- Standar: PBKDF2 (Password-Based Key Derivation Function 2)
+- Fungsi Pseudo-Acak: HMAC-SHA256
+- Faktor Kerja (Iterasi): 200.000 putaran
+- Salt: 128 bit (16 byte) salt acak kriptografis per file, dihasilkan dari sumber entropi perangkat keras OS (secrets.token_bytes).
+- Ketahanan: 200.000 iterasi sengaja meningkatkan biaya komputasi untuk penyerang sebesar 200.000 kali dibandingkan hash SHA-256 biasa, memberikan ketahanan kuat terhadap serangan kamus dan brute-force yang dipercepat GPU.
+
+## Header File Vault yang Diacak
+KEAMANAN HEADER FILE VAULT:
+=============================
+
+Tidak seperti alat enkripsi sederhana yang menggunakan tanda tangan magic tetap (yang memungkinkan siapapun memindai disk untuk menemukan file terenkripsi), Twinclers Guard menurunkan header 3-byte vault dari salt acak unik setiap file menggunakan operasi XOR.
+
+Hasilnya: setiap file .twvault dimulai dengan urutan byte yang berbeda. Tidak ada pola byte tetap yang bisa dicari oleh alat forensik atau pemindai disk untuk mengidentifikasi file terenkripsi Anda.
+
+## Keamanan NTFS Tingkat Kernel
+PERSISTENSI KEAMANAN NTFS KERNEL:
+===================================
+
+- Dibangun langsung ke dalam kernel Sistem Operasi Windows NT (NTFS dan ReFS).
+- Persisten di disk: Aturan proteksi tetap aktif meskipun Twinclers Guard di-uninstall, ditutup, atau PC di-restart.
+- Menggunakan SID independen bahasa (*S-1-1-0 untuk Everyone) untuk memastikan kompatibilitas di semua versi bahasa Windows.
+
+# Fitur Penguatan Keamanan
+PERTAHANAN KEAMANAN AKTIF BAWAAN:
+==================================
+
+Twinclers Guard menyertakan beberapa lapisan pertahanan aktif terhadap serangan digital maupun fisik.
+
+## Perlindungan Anti-Brute Force
+PERLINDUNGAN ANTI-BRUTE FORCE DAN RATE LIMITING:
+==================================================
+
+Twinclers Guard secara otomatis memblokir serangan tebak password otomatis melalui exponential backoff:
+
+- Setelah 3 percobaan gagal: Kunci 1 detik
+- Setelah 5 percobaan gagal: Kunci 5 detik
+- Setelah 8 percobaan gagal: Kunci 30 detik
+- Setelah 12 percobaan gagal: Kunci 120 detik
+- Setelah 15 atau lebih percobaan gagal: Kunci 600 detik (10 menit)
+
+Ini membuat alat brute force otomatis sepenuhnya tidak praktis bahkan terhadap password yang lemah sekalipun.
+
+## Secure File Wipe (DoD 5220.22-M)
+PENGHAPUSAN AMAN SEBELUM HAPUS:
+==================================
+
+Saat Twinclers Guard mengenkripsi file, ia TIDAK sekadar memanggil os.remove() untuk menghapus aslinya. Cara itu akan meninggalkan data plaintext secara fisik di sektor hard drive Anda, yang bisa dipulihkan oleh alat forensik seperti Recuva atau PhotoRec.
+
+Sebaliknya, Twinclers Guard menerapkan 3-pass DoD 5220.22-M secure wipe:
+
+Pass 1: Timpa seluruh konten file dengan byte acak kriptografis.
+Pass 2: Timpa lagi dengan set byte acak kriptografis kedua.
+Pass 3: Timpa ketiga kalinya dan panggil fsync() untuk flush ke penyimpanan fisik.
+Akhir: Barulah entri file dihapus dari tabel filesystem.
+
+Ini membuat pemulihan data plaintext asli menjadi tidak mungkin secara praktis menggunakan alat forensik standar.
+
+## Integritas Database Bertanda Tangan HMAC
+PERLINDUNGAN TAMPERING DATABASE:
+==================================
+
+Database konfigurasi lokal (database.json) ditandatangani secara kriptografis menggunakan HMAC-SHA256. Kunci penandatanganan diturunkan dari Windows Machine GUID unik milik komputer Anda yang tersimpan di Registry:
+
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography\MachineGuid
+
+Artinya:
+- Tanda tangan HMAC unik untuk komputer spesifik Anda.
+- Jika malware atau penyerang memodifikasi file database.json (misalnya untuk mengganti hash password dengan milik mereka sendiri), Twinclers Guard mendeteksi perusakan saat startup berikutnya dan langsung memperingatkan Anda.
+- HMAC juga mencegah serangan hash substitution di mana penyerang mencoba menyuntikkan hash password mereka untuk mendapatkan akses ke folder yang dilindungi Instant Gate.
+
+## Keamanan Memori (Zero-Fill Setelah Digunakan)
+DATA SENSITIF DI RAM:
+======================
+
+Objek string Python bersifat immutable dan tidak bisa dihapus secara eksplisit dari RAM setelah digunakan. Twinclers Guard mengatasi ini dengan teknik berikut:
+
+- Kunci enkripsi AES-256 diturunkan ke objek bytearray yang mutable, bukan bytes yang immutable.
+- Setelah setiap operasi enkripsi atau dekripsi, bytearray kunci langsung ditimpa dengan nol menggunakan ctypes.memset(), menghapus kunci dari RAM secepat mungkin.
+- Field password di kotak dialog dikosongkan (SetValue kosong) segera setelah password diteruskan ke mesin vault, mempersempit jendela waktu di mana password plaintext ada di memori aplikasi.
+- Pelacak sesi aktif hanya menyimpan flag boolean buka/kunci, tidak pernah menyimpan password itu sendiri.
+
+## Enkripsi Transaksional (Aman Saat Interupsi)
+OPERASI ENKRIPSI ATOMIK:
+==========================
+
+Jika daya mati, disk penuh, atau proses dibunuh di tengah enkripsi, implementasi sederhana bisa meninggalkan data parsial di mana beberapa file terenkripsi dengan aslinya terhapus, sementara yang lain masih plaintext.
+
+Twinclers Guard menggunakan pendekatan transaksional:
+
+Langkah 1: Enkripsi data dan tulis hasilnya ke file sementara di direktori yang sama.
+Langkah 2: Hanya jika penulisan selesai sempurna, ganti nama file temp ke nama .twvault final secara atomik menggunakan os.replace().
+Langkah 3: Hanya setelah file vault dikonfirmasi lengkap, lakukan secure wipe 3-pass pada file asli.
+
+Ini memastikan proses enkripsi bersifat all-or-nothing dan data Anda tidak pernah dibiarkan dalam kondisi tidak konsisten atau tidak bisa dipulihkan.
+
+2. Pembatasan Laju Brute-Force (Exponential Backoff)
+   - Upaya kata sandi gagal berturut-turut dilacak di memori.
+   - Setiap kegagalan menggandakan waktu tunggu (dari 1 detik hingga maksimum 10 menit).
+   - Mencegah serangan skrip otomatis yang menebak sandi dengan cepat.
+
+3. Integritas Basis Data & Deteksi Perusakan
+   - Basis data sesi aktif ditandatangani dengan HMAC-SHA256 menggunakan GUID Mesin Windows.
+   - Segala upaya untuk mengedit file JSON secara manual, atau menyalinnya ke mesin lain untuk memotong penguncian, akan membatalkan tanda tangan dan Twinclers Guard akan menolak file tersebut.
+
+4. Izin Akses Ketat
+   - File basis data sensitif dilindungi melalui ICACLS, memberikan akses Baca/Tulis HANYA pada profil Pengguna Windows saat ini dan SYSTEM.
+
+## Model Ancaman & Keterbatasan Keamanan (Threat Model)
+Meskipun Twinclers Guard menggunakan kriptografi kuat, pengguna harus memahami batasan realistis dari perangkat lunak keamanan manapun:
+
+- Batasan Instant Gate (Mode 0.1 Detik): Mode yang mengandalkan NTFS ACL (seperti Instant Gate dan Anti-Delete) TIDAK mengenkripsi data. Mode ini hanya menyuruh OS Windows untuk memblokir akses. Jika penyerang memiliki hak Administrator, mereka bisa merampas kepemilikan folder secara paksa dan menghancurkan gemboknya menggunakan alat bawaan Windows (seperti 'takeown' dan 'icacls'). Selain itu, jika penyerang menyalakan PC Anda menggunakan Flashdisk Linux (Live USB), Linux akan sepenuhnya mengabaikan gembok NTFS Windows. Untuk pertahanan absolut terhadap pencurian fisik atau hacker level-Admin, Anda WAJIB menggunakan mode AES-256 Vault.
+- Keylogger dan Kompromi OS: Jika OS Windows Anda terinfeksi Trojan, Keylogger, atau Rootkit, Twinclers Guard TIDAK BISA melindungi kata sandi master saat Anda mengetiknya. OS yang terinfeksi berarti semua data lokal Anda telah disusupi.
+- Serangan Kamus Offline (Offline Brute-Force): Jika Anda menggunakan sandi master yang lemah (misal "rahasia123"), penyerang yang mencuri file `.twvault` Anda tetap bisa menggunakan alat berbasis GPU secara offline untuk menebak sandi. Kami menggunakan 200.000 iterasi PBKDF2 untuk memperlambat ini, tetapi sandi yang kuat dan unik adalah pertahanan utama Anda.
+- Integritas Kriptografi "Nonce": Kami menggunakan `os.urandom(12)` untuk menjamin Vektor Inisialisasi (Nonce) 12-byte yang unik untuk setiap operasi enkripsi AES-GCM, yang dengan aman memitigasi celah fatal "Nonce Reuse".
+- Data di dalam RAM: Walaupun aplikasi secara aktif menghapus kunci kriptografi dari memori (`ctypes.memset`) segera setelah selesai digunakan, isi file yang telah didekripsi tetap harus ada di RAM sistem Anda secara sementara ketika sedang dibuka/dibaca. Malware tingkat Administrator dapat melakukan "Memory Dump" untuk menyadap data ini saat sedang dilihat.
+
+# Integrasi Windows File Explorer dan Penguncian Ulang Otomatis
+ALUR KERJA FILE EXPLORER YANG MULUS:
+======================================
+
+1. Buka This PC di Windows File Explorer.
+2. Navigasi ke folder yang dilindungi password (Instant Gate atau AES-256 Vault).
+3. Background Explorer Watcher Twinclers Guard mendeteksi path folder aktif via Windows Shell COM API.
+4. Jendela Password Prompt otomatis muncul di depan File Explorer.
+5. NVDA mengumumkan: Folder [Nama] dilindungi password. Masukkan password untuk membuka.
+6. Ketik password dan tekan Enter.
+7. Folder terbuka dan File Explorer langsung menyegarkan tampilan untuk menampilkan file Anda.
+8. Bekerja dengan file Anda dengan bebas.
+9. Saat Anda menutup jendela File Explorer, Twinclers Guard otomatis mengunci folder di background.
+10. NVDA mengumumkan: Folder [Nama] telah otomatis dikunci.
+
+# Integrasi Menu Klik Kanan Windows Explorer
+MENGINTEGRASIKAN TWINCLERS GUARD KE MENU KLIK KANAN:
+======================================================
+
+Twinclers Guard dapat diintegrasikan langsung ke menu klik kanan Windows File Explorer. Setelah terdaftar, Anda bisa klik kanan folder atau file MANAPUN di Windows Explorer dan mengakses operasi Twinclers Guard secara instan, tanpa harus membuka jendela utama aplikasi terlebih dahulu.
+
+CARA MENGAKTIFKAN:
+- Buka Twinclers Guard.
+- Di menu File, pilih Integrate with Windows Explorer Context Menu.
+- NVDA akan mengumumkan: Menu klik kanan Twinclers Guard berhasil didaftarkan.
+
+CARA MENONAKTIFKAN (HAPUS):
+- Buka Twinclers Guard.
+- Di menu File, pilih Integrate with Windows Explorer Context Menu lagi.
+- Menu item ini berfungsi sebagai toggle. Memilihnya untuk kedua kalinya akan menghapus menu klik kanan.
+- NVDA akan mengumumkan: Menu klik kanan Twinclers Guard telah dihapus dari Windows Explorer.
+
+APA YANG MUNCUL DI MENU KLIK KANAN:
+Setelah pendaftaran, klik kanan folder atau file di Windows Explorer menampilkan submenu Twinclers Guard dengan 4 entri:
+
+1. Protect with Twinclers Guard
+   Langsung menerapkan proteksi Anti-Hapus pada folder atau file yang dipilih, menambahkannya ke daftar Twinclers Guard, dan membuka jendela utama untuk konfirmasi.
+
+2. Unprotect (Remove Protection)
+   Langsung menghapus semua aturan NTFS deny Twinclers Guard dari item yang dipilih.
+
+3. Add to Twinclers Guard List
+   Menambahkan item yang dipilih ke daftar pantau tanpa langsung menerapkan proteksi. Anda kemudian bisa memilih mode proteksi di dalam aplikasi.
+
+4. Open Twinclers Guard
+   Membuka jendela utama Twinclers Guard tanpa melakukan operasi apapun pada item yang dipilih.
+
+CARA KERJA SECARA TEKNIS:
+Entri menu klik kanan ditulis ke Windows Registry di bawah:
+  HKEY_CURRENT_USER\Software\Classes\Directory\shell\TwinclersGuard  (untuk folder)
+  HKEY_CURRENT_USER\Software\Classes\*\shell\TwinclersGuard          (untuk file)
+
+Karena kunci-kunci ini ada di HKCU (Current User), tidak diperlukan hak Administrator untuk mendaftarkan atau menghapusnya.
+
+Saat Anda memilih entri menu klik kanan, Windows memanggil Twinclers Guard dengan argumen baris perintah:
+  --protect "D:\FolderAnda"    untuk Protect
+  --unprotect "D:\FolderAnda"  untuk Unprotect
+  --add "D:\FolderAnda"        untuk Add to List
+
+
+# Pintasan Keyboard Lengkap
+Navigasi seluruh aplikasi secara efisien menggunakan keyboard atau screen reader.
+
+
+## Menu dan Aksi Utama
+PINTASAN KEYBOARD:
+==================
+- Ctrl + O          : Tambah Folder ke daftar pantau
+- Ctrl + Shift + O  : Tambah File ke daftar pantau
+- Ctrl + P          : Proteksi / Kunci item terpilih
+- Ctrl + U          : Buka Proteksi / Buka Kunci item terpilih
+- Ctrl + Shift + P  : Proteksi Semua item dalam daftar
+- Ctrl + Shift + U  : Buka Proteksi Semua item
+- Ctrl + T          : Uji Proteksi Anti-Hapus
+- Ctrl + M          : Ganti Mode Keamanan
+- Ctrl + H          : Sembunyikan / Perkecil ke System Tray
+- Delete            : Hapus item terpilih dari daftar
+- F5                : Refresh status proteksi dari disk
+- F1                : Buka Jendela Bantuan ini
+- Alt + F4          : Keluar Aplikasi
+
+## Navigasi Jendela Bantuan Ini
+CARA MENGGUNAKAN JENDELA BANTUAN:
+===================================
+1. Gunakan Panah Atas dan Bawah untuk navigasi topik bantuan di TreeView kiri.
+2. Gunakan Panah Kanan untuk memperluas topik dan Panah Kiri untuk menutupnya.
+3. Tekan TAB untuk memindahkan fokus ke Text Reader di kanan.
+4. Di Text Reader gunakan Arrow atau Page Up dan Page Down untuk membaca baris per baris.
+5. Tekan Shift + TAB untuk kembali ke TreeView.
+6. Tekan ESC untuk menutup Jendela Bantuan.
+
+# System Tray
+CARA MENGGUNAKAN SYSTEM TRAY:
+==============================
+- Tekan Ctrl + H atau perkecil jendela untuk menyembunyikan Twinclers Guard ke System Tray.
+- NVDA akan mengumumkan: Twinclers Guard diminimalkan ke system tray.
+- Untuk memulihkan: Klik ikon perisai di System Tray atau tekan Enter padanya.
+- Klik kanan ikon tray untuk akses cepat: Tampilkan Jendela, Proteksi Semua, Buka Proteksi Semua, Keluar.
+
+# NVDA dan Integrasi Screen Reader
+AKSESIBILITAS KELAS SATU DENGAN NVDA CONTROLLER CLIENT:
+=========================================================
+
+Twinclers Guard menyertakan nvdaControllerClient.dll resmi untuk berkomunikasi langsung dengan NVDA:
+
+- Pengumuman Speech Otomatis: Status real-time tanpa kotak pesan modal yang mengganggu.
+- Output Braille Display: Semua pesan status dikirim bersamaan ke Braille display.
+- Kontrol Win32 Native: 100% dapat diakses via MSAA dan standar UI Automation.
+- Pengumuman Rate Limit: Saat terlalu banyak password salah dimasukkan, NVDA mengumumkan durasi lockout yang tepat.
+
+# Uji Proteksi Anti-Hapus
+CARA KERJA UJI HAPUS DALAM APLIKASI:
+======================================
+1. Pilih folder manapun yang sudah Terproteksi.
+2. Tekan Ctrl + T atau pilih Aksi kemudian Uji Proteksi Anti-Hapus.
+3. Twinclers Guard membuat file uji sementara di dalam folder lalu mencoba menghapusnya.
+4. Windows memblokir penghapusan (Akses Ditolak), membuktikan folder sepenuhnya aman.
+5. Aplikasi membersihkan file uji dengan aman dan menyajikan laporan keberhasilan.
+
+# Pertanyaan yang Sering Diajukan
+PERTANYAAN YANG SERING DIAJUKAN:
+===================================
+
+T: Apa perbedaan antara Instant Password Gate dan AES-256 Military Vault?
+J: Instant Gate menggunakan gerbang keamanan NTFS Kernel Windows, ideal untuk media besar di mana pembukaan instan sangat penting. AES-256 Vault secara fisik mengenkripsi byte file, ideal untuk source code rahasia dan kredensial di mana data harus tetap tidak terbaca bahkan terhadap pengambilalihan Admin atau pencabutan disk fisik.
+
+T: Apakah folder saya terlindungi jika komputer di-restart atau aplikasi ditutup?
+J: YA 100%. Aturan NTFS ACL dan byte terenkripsi AES-256 ditulis permanen ke filesystem.
+
+T: Bisakah saya memindahkan folder terenkripsi ke komputer atau drive letter lain?
+J: YA. Setiap file .twvault membawa parameter kriptografisnya sendiri. Anda bisa menyalin folder ke mana saja dan mendekripsinya hanya dengan password master di komputer manapun yang memiliki Twinclers Guard.
+
+T: Apa yang terjadi jika saya lupa password master?
+J: Tidak ada mekanisme pemulihan berdasarkan desain. Ini adalah jaminan zero-knowledge. Tidak ada backdoor. Simpan password master Anda di manajer password yang aman.
+
+T: Apa yang dilakukan aplikasi jika database.json dirusak?
+J: Twinclers Guard mendeteksi tanda tangan HMAC yang tidak valid segera saat startup dan menampilkan peringatan. File vault terenkripsi Anda sendiri tetap sepenuhnya aman karena keamanannya tidak bergantung pada database.
+
+T: Bisakah saya menerjemahkan aplikasi ini ke bahasa lain?
+J: Ya. File bahasa terletak di folder locales sebagai file JSON dan teks biasa yang sederhana.
+
+
+--------------------------------------------------
+BATASAN KEAMANAN (LAPORAN TRANSPARANSI)
+--------------------------------------------------
+1. Bypass Pemilik NTFS (WRITE_DAC): Mode perlindungan NTFS (Anti-Delete, Read-Only, Full Lock) menerapkan aturan Deny pada grup Users. Namun, arsitektur Windows secara bawaan mengizinkan Pembuat/Pemilik file untuk mengubah izin file miliknya sendiri. Oleh karena itu, mode NTFS dirancang untuk mencegah penghapusan tidak sengaja dan memblokir aplikasi standar, BUKAN untuk menghentikan pengguna yang mahir menggunakan terminal. Untuk kerahasiaan data tingkat tinggi, Anda WAJIB menggunakan AES-256 Military Vault.
+2. Titik Buta Instant Gate: Mode Instant Gate hanya mendeteksi navigasi melalui GUI Windows Explorer. Mode ini TIDAK memantau atau memblokir akses dari Command Prompt, PowerShell, WSL, atau aplikasi pihak ketiga seperti 7-Zip. Selalu gunakan AES-256 Vault untuk mengamankan data yang sangat sensitif.
+
