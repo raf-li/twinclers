@@ -21,4 +21,4 @@ Name: "{commondesktop}\Twinclers Guard"; Filename: "{app}\TwinclersGuard.exe"; T
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [UninstallRun]
-Filename: "{app}\TwinclersGuard.exe"; Parameters: "--uninstall-cleanup"; Flags: runhidden runasoriginaluser
+Filename: "{app}\TwinclersGuard.exe"; Parameters: "--uninstall-cleanup"; Flags: runhidden
