@@ -19,7 +19,6 @@ Output/
 
 # Sensitive or local scripts
 scratch_*.py
-update.json
 
 # Agent and Local Dev
 .agents/
