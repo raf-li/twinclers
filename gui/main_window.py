@@ -15,7 +15,7 @@ from core.vault_manager import vault_mgr
 from core.explorer_monitor import explorer_watcher
 from core.nvda_speaker import speaker
 from gui.dialogs import AddItemDialog, ChangeModeDialog, TestResultDialog
-from gui.password_dialog import PasswordPromptDialog, SetPasswordDialog
+from gui.password_dialog import PasswordPromptDialog, SetPasswordDialog, LockPasswordPromptDialog
 from gui.help_dialog import HelpDialog
 from gui.tray_icon import TwinclersTrayIcon
 
@@ -632,8 +632,22 @@ class MainWindow(wx.Frame):
                     else:
                         return
             else:
-                vault_mgr.lock_item(path)
-                speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
+                if mode == "aes256_vault":
+                    with LockPasswordPromptDialog(self, target_path=path) as dlg:
+                        if dlg.ShowModal() == wx.ID_OK:
+                            ok, msg = vault_mgr.lock_item(path, password=dlg.password)
+                            if ok:
+                                speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
+                            else:
+                                speaker.speak(f"Error locking: {msg}")
+                        else:
+                            return
+                else:
+                    ok, msg = vault_mgr.lock_item(path)
+                    if ok:
+                        speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
+                    else:
+                        speaker.speak(f"Error locking: {msg}")
             self.refresh_list()
         else:
             ok, msg = acl_engine.protect(path, mode=mode)
@@ -689,8 +703,16 @@ class MainWindow(wx.Frame):
                     storage.update_item(path, status="protected")
                     success_count += 1
             else:
-                vault_mgr.lock_item(path)
-                success_count += 1
+                if mode == "aes256_vault":
+                    with LockPasswordPromptDialog(self, target_path=path) as dlg:
+                        if dlg.ShowModal() == wx.ID_OK:
+                            ok, _ = vault_mgr.lock_item(path, password=dlg.password)
+                            if ok:
+                                success_count += 1
+                else:
+                    ok, _ = vault_mgr.lock_item(path)
+                    if ok:
+                        success_count += 1
 
         self.refresh_list()
         speaker.speak(_("ANNOUNCE_PROTECT_ALL", count=success_count))

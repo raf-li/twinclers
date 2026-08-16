@@ -115,6 +115,52 @@ class PasswordPromptDialog(wx.Dialog):
             self.txt_pwd.SelectAll()
             self.txt_pwd.SetFocus()
 
+class LockPasswordPromptDialog(wx.Dialog):
+    """Password prompt to re-lock (encrypt) an AES-256 vault."""
+    def __init__(self, parent, target_path: str):
+        self.target_path = target_path
+        self.target_name = os.path.basename(target_path) or target_path
+        self.password = ""
+        super().__init__(
+            parent,
+            title=f"Lock {self.target_name}",
+            size=(440, 240),
+            style=wx.DEFAULT_DIALOG_STYLE | wx.STAY_ON_TOP
+        )
+        self.init_ui()
+        self.CentreOnScreen()
+        speaker.speak(f"Enter your password to lock and encrypt {self.target_name}.")
+        self.Raise()
+
+    def init_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        lbl_info = wx.StaticText(self, label=f"Enter password to encrypt and lock:\n{self.target_path}")
+        sizer.Add(lbl_info, 0, wx.ALL, 12)
+        pwd_box = wx.BoxSizer(wx.VERTICAL)
+        lbl_pwd = wx.StaticText(self, label="&Password:")
+        self.txt_pwd = wx.TextCtrl(self, style=wx.TE_PASSWORD | wx.TE_PROCESS_ENTER)
+        pwd_box.Add(lbl_pwd, 0, wx.BOTTOM, 4)
+        pwd_box.Add(self.txt_pwd, 0, wx.EXPAND)
+        sizer.Add(pwd_box, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 12)
+        btn_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+        sizer.Add(btn_sizer, 0, wx.EXPAND | wx.ALL, 8)
+        self.SetSizer(sizer)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+        self.txt_pwd.Bind(wx.EVT_TEXT_ENTER, self.on_ok)
+
+    def on_ok(self, event):
+        pwd = self.txt_pwd.GetValue()
+        if not pwd:
+            speaker.speak("Please enter a password.")
+            return
+        if vault_mgr.verify_password(self.target_path, pwd):
+            self.password = pwd
+            self.txt_pwd.SetValue("")
+            self.EndModal(wx.ID_OK)
+        else:
+            speaker.speak("Wrong password.")
+            self.txt_pwd.SelectAll()
+
 
 class SetPasswordDialog(wx.Dialog):
     """Dialog to set a new password for a folder."""

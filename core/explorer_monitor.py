@@ -9,6 +9,9 @@ import time
 import threading
 import urllib.parse
 from typing import Callable, Set, List, Optional
+import win32com.client
+import pythoncom
+
 from core.storage import storage
 from core.vault_manager import vault_mgr
 from core.nvda_speaker import speaker
@@ -46,8 +49,6 @@ class ExplorerMonitor:
         """Retrieves a list of all folder paths currently open in Windows Explorer."""
         open_paths = []
         try:
-            import win32com.client
-            import pythoncom
             pythoncom.CoInitialize()
             
             shell = win32com.client.Dispatch("Shell.Application")

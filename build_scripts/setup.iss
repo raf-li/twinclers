@@ -12,6 +12,7 @@ SetupIconFile=..\app.ico
 
 [Files]
 Source: "..\dist\main.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\libs\*"; DestDir: "{app}\libs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Twinclers Guard"; Filename: "{app}\TwinclersGuard.exe"

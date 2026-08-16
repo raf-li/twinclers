@@ -115,28 +115,28 @@ def main():
     
     if checker.IsAnotherRunning():
         # If another instance is already running, send CLI arguments to it (IPC)
-        if len(sys.argv) > 1:
-            import socket
-            import json
-            import os
-            
-            token = ""
-            token_file = os.path.join(os.getenv('APPDATA'), 'TwinclersGuard', '.ipc_auth')
-            try:
-                if os.path.exists(token_file):
-                    with open(token_file, 'r', encoding='utf-8') as f:
-                        token = f.read().strip()
-            except OSError:
-                pass
+        import socket
+        import json
+        import os
+        
+        token = ""
+        token_file = os.path.join(os.getenv('APPDATA'), 'TwinclersGuard', '.ipc_auth')
+        try:
+            if os.path.exists(token_file):
+                with open(token_file, 'r', encoding='utf-8') as f:
+                    token = f.read().strip()
+        except OSError:
+            pass
 
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(2)
-                    s.connect(('127.0.0.1', 49152))
-                    payload = {"token": token, "args": sys.argv[1:]}
-                    s.sendall(json.dumps(payload).encode('utf-8'))
-            except OSError:
-                pass
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(2)
+                s.connect(('127.0.0.1', 49152))
+                args_to_send = sys.argv[1:] if len(sys.argv) > 1 else ["--gui"]
+                payload = {"token": token, "args": args_to_send}
+                s.sendall(json.dumps(payload).encode('utf-8'))
+        except OSError:
+            pass
         sys.exit(0)
 
     # --- Main Instance ---
