@@ -2,8 +2,16 @@ name: Build Twinclers Guard
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'locales/**'
+      - '.agents/**'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+      - 'locales/**'
+      - '.agents/**'
 
 jobs:
   build:
