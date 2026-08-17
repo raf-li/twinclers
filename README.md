@@ -12,7 +12,7 @@ Download the installer (`TwinclersGuardSetup.exe`) from the [Releases](https://g
 
 1. **Anti-Delete (Default):** Prevents file deletion while allowing normal read and write access.
 2. **Instant Password Gate:** Locks folders instantly using NTFS ACLs.
-3. **AES-256 Vault:** Encrypts files using AES-256-GCM. Uses Windows DPAPI to secure the master password in memory.
+3. **AES-256 Vault:** Encrypts files using AES-256-GCM.
 4. **Anti-Rename and Move:** Stops files from being renamed or moved. Deletion is also blocked.
 5. **Append-Only:** Allows creating new files but denies modifications to existing ones.
 6. **Read-Only:** Denies write access to prevent any modifications or deletions.
@@ -40,6 +40,14 @@ If you open a protected folder in Windows File Explorer, Twinclers Guard display
 | `F5` | Refresh Status |
 | `F1` | Help Menu |
 | `Alt + F4` | Exit |
+## Help Translate
+
+Twinclers Guard supports multiple languages. You can help translate it into your language without writing any code.
+
+Translations are stored in the locales directory as simple JSON and text files:
+1. Copy locales/en.json and rename it to your language code (e.g., es.json for Spanish). Translate the text values inside.
+2. Copy locales/help_en.txt, rename it to help_es.txt, and translate the help guide.
+3. Submit a Pull Request with your new files.
 
 ---
 Compiled with Nuitka using Python and wxPython.
