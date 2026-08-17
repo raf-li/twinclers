@@ -56,6 +56,13 @@ class MainWindow(wx.Frame):
 
         self.init_menu()
         self.init_ui()
+        # Inisialisasi Database
+        storage.load_data()
+        
+        # Mulai proses sinkronisasi bahasa di latar belakang (OTA Updates)
+        i18n.sync_locales_from_github_background()
+
+        # Gunakan bahasa yang tersimpan di profil pengguna (atau default English)
         self.init_accelerators()
         self.Centre()
 

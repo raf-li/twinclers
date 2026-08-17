@@ -26,26 +26,31 @@ class HelpParser:
     @staticmethod
     def get_help_filepath(lang_code: str = "en") -> str:
         """Finds the help file path based on language or fallbacks to default."""
+        from core.i18n import i18n
+        locales_dir = i18n.locales_dir
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         
-        # 1. Cek di locales/help_{lang}.txt
-        lang_file = os.path.join(base_dir, "locales", f"help_{lang_code}.txt")
+        # 1. Cek di AppData locales/help_{lang}.txt
+        lang_file = os.path.join(locales_dir, f"help_{lang_code}.txt")
         if os.path.exists(lang_file):
             return lang_file
             
-        # 2. Cek di root help_{lang}.txt
-        root_lang_file = os.path.join(base_dir, f"help_{lang_code}.txt")
-        if os.path.exists(root_lang_file):
-            return root_lang_file
+        # 2. Fallback cek di instalasi (meski seharusnya sudah dicopy)
+        fallback_lang = os.path.join(base_dir, "locales", f"help_{lang_code}.txt")
+        if os.path.exists(fallback_lang):
+            return fallback_lang
+            
+        # 3. Fallback English
+        fallback_en = os.path.join(locales_dir, "help_en.txt")
+        if os.path.exists(fallback_en):
+            return fallback_en
 
-        # 3. Fallback ke locales/help_en.txt
-        default_file = os.path.join(base_dir, "locales", "help_en.txt")
-        if os.path.exists(default_file):
-            return default_file
+        # 4. Fallback root help.txt lama
+        fallback_root = os.path.join(base_dir, "help.txt")
+        if os.path.exists(fallback_root):
+            return fallback_root
 
-        # 4. Fallback ke root help.txt
-        root_file = os.path.join(base_dir, "help.txt")
-        return root_file
+        return ""
 
     @classmethod
     def parse_file(cls, filepath: str) -> List[HelpItem]:
