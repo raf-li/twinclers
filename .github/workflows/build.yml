@@ -18,7 +18,16 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install nuitka
+        pip install nuitka zstandard ordered-set
+    
+    - name: Cache Nuitka CCache
+      uses: actions/cache@v4
+      with:
+        path: ~\AppData\Local\Nuitka\Nuitka\Cache
+        key: nuitka-windows-${{ runner.os }}-${{ hashFiles('requirements.txt', '**/*.py') }}
+        restore-keys: |
+          nuitka-windows-${{ runner.os }}-
+
     - name: Build Executable with Nuitka
       run: |
         .\build_scripts\build_nuitka.bat

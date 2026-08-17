@@ -15,7 +15,7 @@ from core.vault_manager import vault_mgr
 from core.explorer_monitor import explorer_watcher
 from core.nvda_speaker import speaker
 from gui.dialogs import AddItemDialog, ChangeModeDialog, TestResultDialog
-from gui.password_dialog import PasswordPromptDialog, SetPasswordDialog, LockPasswordPromptDialog
+from gui.password_dialog import PasswordPromptDialog, SetPasswordDialog
 from gui.help_dialog import HelpDialog
 from gui.tray_icon import TwinclersTrayIcon
 
@@ -206,12 +206,25 @@ class MainWindow(wx.Frame):
             self.select_path_in_list(target_path)
             
             if action == "add":
-                # Jika item baru ditambahkan lewat context menu
+                # Cek jika sudah terdaftar
                 item = storage.get_item(target_path)
                 if not item:
-                    storage.add_item(target_path, mode=mode or "anti_delete")
+                    # Auto-Detect
+                    if vault_mgr.has_encrypted_vault_files(target_path):
+                        storage.add_item(target_path, mode="aes256_vault")
+                        storage.update_item(target_path, status="protected")
+                        speaker.speak(f"Auto-detected existing AES-256 Vault.")
+                    else:
+                        acl_status = acl_engine.check_protection_status(target_path)
+                        if acl_status and acl_status.get("protected"):
+                            detected_mode = acl_status.get("mode")
+                            storage.add_item(target_path, mode=detected_mode if detected_mode != "none" else "anti_delete")
+                            storage.update_item(target_path, status="protected")
+                            speaker.speak(f"Auto-detected existing protection.")
+                        else:
+                            storage.add_item(target_path, mode=mode or "anti_delete")
+                            speaker.speak(f"{os.path.basename(target_path)} added.")
                 self.refresh_list()
-                speaker.speak(f"{os.path.basename(target_path)} added.")
             elif action == "protect":
                 self.on_protect_selected(None)
             elif action == "unprotect":
@@ -524,7 +537,12 @@ class MainWindow(wx.Frame):
             if dlg.ShowModal() == wx.ID_OK:
                 self.refresh_list()
             else:
-                explorer_watcher.clear_prompted_flag(path)
+                # User membatalkan input password / gagal, tendang keluar dari folder
+                explorer_watcher.force_navigate_away(path)
+                
+                # Beri jeda sedikit agar Explorer sempat pindah direktori sebelum flag dihapus
+                # Jika tidak diberi jeda, watcher bisa keburu memanggil prompt ini lagi.
+                wx.CallLater(500, explorer_watcher.clear_prompted_flag, path)
 
     # --- System Tray & Window State Handlers ---
 
@@ -590,12 +608,28 @@ class MainWindow(wx.Frame):
                 auto_protect = dlg.auto_protect
                 name = os.path.basename(path) or path
 
-                storage.add_item(path, mode=mode)
-
+                # 1. Cek apakah ini AES-256 Vault lama
                 if vault_mgr.has_encrypted_vault_files(path):
-                    storage.update_item(path, mode="aes256_vault", status="protected")
-                    speaker.speak(f"Encrypted vault {name} added to list.")
-                elif auto_protect:
+                    storage.add_item(path, mode="aes256_vault")
+                    storage.update_item(path, status="protected")
+                    speaker.speak(f"Auto-detected existing AES-256 Vault. {name} added and protected.")
+                    self.refresh_list()
+                    return
+
+                # 2. Cek apakah folder ini sudah terproteksi oleh ACL Windows dari Twinclers sebelumnya
+                acl_status = acl_engine.check_protection_status(path)
+                if acl_status and acl_status.get("protected"):
+                    detected_mode = acl_status.get("mode")
+                    if detected_mode != "none":
+                        storage.add_item(path, mode=detected_mode)
+                        storage.update_item(path, status="protected")
+                        speaker.speak(f"Auto-detected existing protection. {name} added as {detected_mode}.")
+                        self.refresh_list()
+                        return
+
+                # 3. Jika folder/file baru dan tidak ada proteksi lama
+                storage.add_item(path, mode=mode)
+                if auto_protect:
                     if mode in ["instant_gate", "aes256_vault"] and dlg.password:
                         vault_mgr.set_password(path, dlg.password, mode=mode)
                         speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
@@ -632,22 +666,18 @@ class MainWindow(wx.Frame):
                     else:
                         return
             else:
-                if mode == "aes256_vault":
-                    with LockPasswordPromptDialog(self, target_path=path) as dlg:
-                        if dlg.ShowModal() == wx.ID_OK:
-                            ok, msg = vault_mgr.lock_item(path, password=dlg.password)
-                            if ok:
-                                speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
-                            else:
-                                speaker.speak(f"Error locking: {msg}")
-                        else:
-                            return
+                ok, msg = vault_mgr.lock_item(path)
+                if not ok and "password required" in msg:
+                    # Fallback jika memori RAM/DPAPI hilang (misal aplikasi baru saja direstart)
+                    dlg = wx.PasswordEntryDialog(self, f"Session lost. Enter password to encrypt and lock {name}:", "Password Required")
+                    if dlg.ShowModal() == wx.ID_OK:
+                        ok, msg = vault_mgr.lock_item(path, password=dlg.GetValue())
+                    dlg.Destroy()
+
+                if ok:
+                    speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
                 else:
-                    ok, msg = vault_mgr.lock_item(path)
-                    if ok:
-                        speaker.speak(_("ANNOUNCE_PROTECTED", mode=mode, name=name))
-                    else:
-                        speaker.speak(f"Error locking: {msg}")
+                    speaker.speak(f"Error locking: {msg}")
             self.refresh_list()
         else:
             ok, msg = acl_engine.protect(path, mode=mode)
@@ -703,16 +733,16 @@ class MainWindow(wx.Frame):
                     storage.update_item(path, status="protected")
                     success_count += 1
             else:
-                if mode == "aes256_vault":
-                    with LockPasswordPromptDialog(self, target_path=path) as dlg:
-                        if dlg.ShowModal() == wx.ID_OK:
-                            ok, _ = vault_mgr.lock_item(path, password=dlg.password)
-                            if ok:
-                                success_count += 1
-                else:
-                    ok, _ = vault_mgr.lock_item(path)
-                    if ok:
-                        success_count += 1
+                ok, msg = vault_mgr.lock_item(path)
+                if not ok and "password required" in msg:
+                    name = os.path.basename(path) or path
+                    dlg = wx.PasswordEntryDialog(self, f"Session lost. Enter password to encrypt and lock {name}:", "Password Required")
+                    if dlg.ShowModal() == wx.ID_OK:
+                        ok, _ = vault_mgr.lock_item(path, password=dlg.GetValue())
+                    dlg.Destroy()
+                    
+                if ok:
+                    success_count += 1
 
         self.refresh_list()
         speaker.speak(_("ANNOUNCE_PROTECT_ALL", count=success_count))

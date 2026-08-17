@@ -8,10 +8,48 @@ SECURITY PATCHES APPLIED:
 
 import os
 import time
+import ctypes
+from ctypes import wintypes
 from typing import Tuple, Optional, Dict
 from core.vault_crypto import VaultCrypto
 from core.acl_manager import acl_engine
 from core.storage import storage
+
+# --- Windows DPAPI Helpers for Secure In-Memory Session Storage ---
+CRYPTPROTECT_UI_FORBIDDEN = 0x01
+class DATA_BLOB(ctypes.Structure):
+    _fields_ = [("cbData", wintypes.DWORD),
+                ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+_crypt32 = ctypes.windll.crypt32
+_crypt32.CryptProtectData.argtypes = [ctypes.POINTER(DATA_BLOB), wintypes.LPCWSTR, ctypes.POINTER(DATA_BLOB), ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(DATA_BLOB)]
+_crypt32.CryptProtectData.restype = wintypes.BOOL
+_crypt32.CryptUnprotectData.argtypes = [ctypes.POINTER(DATA_BLOB), ctypes.POINTER(wintypes.LPWSTR), ctypes.POINTER(DATA_BLOB), ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(DATA_BLOB)]
+_crypt32.CryptUnprotectData.restype = wintypes.BOOL
+
+def _dpapi_encrypt(data: bytes) -> bytes:
+    try:
+        in_blob = DATA_BLOB(len(data), ctypes.cast(ctypes.c_char_p(data), ctypes.POINTER(ctypes.c_byte)))
+        out_blob = DATA_BLOB()
+        if _crypt32.CryptProtectData(ctypes.byref(in_blob), None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(out_blob)):
+            result = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+            ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+            return result
+    except Exception as e:
+        print("DPAPI Encrypt Error:", e)
+    return b""
+
+def _dpapi_decrypt(encrypted_data: bytes) -> bytes:
+    try:
+        in_blob = DATA_BLOB(len(encrypted_data), ctypes.cast(ctypes.c_char_p(encrypted_data), ctypes.POINTER(ctypes.c_byte)))
+        out_blob = DATA_BLOB()
+        if _crypt32.CryptUnprotectData(ctypes.byref(in_blob), None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, ctypes.byref(out_blob)):
+            result = ctypes.string_at(out_blob.pbData, out_blob.cbData)
+            ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+            return result
+    except Exception as e:
+        print("DPAPI Decrypt Error:", e)
+    return b""
 
 # VLN-09: Tracker for failed login attempts per path
 _brute_force_tracker: Dict[str, Dict] = {}
@@ -129,12 +167,14 @@ class VaultManager:
                 ok, msg = VaultCrypto.decrypt_file(target_f, password)
                 cnt = 1 if ok else 0
 
-            if ok and cnt > 0:
-                # VLN-07: TIDAK simpan password — hanya session flag
+            if ok and cnt >= 0:
+                # VLN-07 & NEW DPAPI: Simpan versi terenkripsi dari password menggunakan Windows DPAPI
+                dpapi_blob = _dpapi_encrypt(password.encode('utf-8'))
+                
                 self.active_sessions[norm_path] = {
                     "mode": "aes256_vault",
-                    "unlocked": True
-                    # password intentionally NOT stored
+                    "unlocked": True,
+                    "dpapi_blob": dpapi_blob
                 }
                 hash_hex, salt_hex = VaultCrypto.hash_password(password)
                 storage.update_item(
@@ -182,6 +222,15 @@ class VaultManager:
             return False, msg
 
         elif mode == "aes256_vault":
+            # Attempt to retrieve password from DPAPI blob if not provided explicitly
+            if not password:
+                session = self.active_sessions.get(norm_path, {})
+                dpapi_blob = session.get("dpapi_blob")
+                if dpapi_blob:
+                    decrypted = _dpapi_decrypt(dpapi_blob)
+                    if decrypted:
+                        password = decrypted.decode('utf-8')
+                        
             if not password:
                 self.active_sessions.pop(norm_path, None)
                 storage.update_item(norm_path, status="unprotected")
@@ -192,6 +241,9 @@ class VaultManager:
             else:
                 ok, msg = VaultCrypto.encrypt_file(norm_path, password)
                 cnt = 1 if ok else 0
+
+            # Zero-fill the local password variable to clear it from memory as fast as possible
+            password = ""
 
             if ok:
                 self.active_sessions.pop(norm_path, None)

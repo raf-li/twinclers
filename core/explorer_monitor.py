@@ -68,6 +68,34 @@ class ExplorerMonitor:
             pass
         return open_paths
 
+    def force_navigate_away(self, target_path: str):
+        """Forces any Explorer window currently at target_path (or subfolders) to navigate up to the parent directory."""
+        norm_target = storage.normalize_path(target_path)
+        parent_dir = os.path.dirname(norm_target)
+        if not os.path.exists(parent_dir):
+            parent_dir = "C:\\"
+
+        try:
+            pythoncom.CoInitialize()
+            shell = win32com.client.Dispatch("Shell.Application")
+            windows = shell.Windows()
+            
+            for w in windows:
+                try:
+                    url = getattr(w, "LocationURL", "")
+                    if url and url.startswith("file:///"):
+                        parsed_path = urllib.parse.unquote(url[8:]).replace("/", "\\")
+                        norm_parsed = storage.normalize_path(parsed_path)
+                        
+                        # Jika Explorer sedang di dalam folder yang terkunci
+                        if norm_parsed == norm_target or norm_parsed.startswith(norm_target + "\\"):
+                            # Paksa kembali / naik ke parent folder
+                            w.Navigate(parent_dir)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _monitor_loop(self):
         while self._running:
             try:
